@@ -77,3 +77,12 @@ export interface ProjectMetadata {
   layerCount: number;
   updatedAt: string;
 }
+
+/** Serializable scene state for export/restore and undo/redo. */
+export interface SceneSnapshotV1 {
+  version: 1;
+  projectName: string;
+  updatedAt: string;
+  layers: Layer[];
+  entities: Entity2D[];
+}

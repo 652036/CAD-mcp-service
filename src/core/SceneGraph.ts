@@ -6,6 +6,7 @@ import type {
   NewEntity2D,
   PolylineEntity,
   ProjectMetadata,
+  SceneSnapshotV1,
 } from "./types.js";
 
 export type { ProjectMetadata };
@@ -16,6 +17,10 @@ function cloneEntity(entity: Entity2D): Entity2D {
   return JSON.parse(JSON.stringify(entity)) as Entity2D;
 }
 
+function cloneLayer(layer: Layer): Layer {
+  return JSON.parse(JSON.stringify(layer)) as Layer;
+}
+
 export class SceneGraph {
   private readonly entities = new Map<EntityId, Entity2D>();
   private readonly layers = new Map<string, Layer>();
@@ -23,6 +28,40 @@ export class SceneGraph {
   private updatedAt = new Date();
 
   constructor() {
+    this.ensureDefaultLayer();
+  }
+
+  setProjectName(name: string): void {
+    this.projectName = name;
+    this.touch();
+  }
+
+  exportSnapshot(): SceneSnapshotV1 {
+    return {
+      version: 1,
+      projectName: this.projectName,
+      updatedAt: this.updatedAt.toISOString(),
+      layers: Array.from(this.layers.values()).map(cloneLayer),
+      entities: Array.from(this.entities.values()).map(cloneEntity),
+    };
+  }
+
+  restoreSnapshot(snapshot: SceneSnapshotV1): void {
+    if (snapshot.version !== 1) {
+      throw new Error(
+        `Unsupported scene snapshot version: ${String(snapshot.version)}`,
+      );
+    }
+    this.entities.clear();
+    this.layers.clear();
+    this.projectName = snapshot.projectName;
+    this.updatedAt = new Date(snapshot.updatedAt);
+    for (const layer of snapshot.layers) {
+      this.layers.set(layer.name, cloneLayer(layer));
+    }
+    for (const entity of snapshot.entities) {
+      this.entities.set(entity.id, cloneEntity(entity));
+    }
     this.ensureDefaultLayer();
   }
 
