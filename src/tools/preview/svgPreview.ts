@@ -1,4 +1,4 @@
-import type { EntityRecord } from "../../core/SceneGraph.js";
+import type { Entity2D } from "../../core/types.js";
 
 function escapeAttr(s: string): string {
   return s
@@ -7,11 +7,16 @@ function escapeAttr(s: string): string {
     .replace(/</g, "&lt;");
 }
 
-function pointString(
-  pts: ReadonlyArray<{ x: number; y: number }>,
+/** Flat coords [x0,y0,x1,y1,...] → SVG points string */
+function coordsToPointString(
+  coords: readonly number[],
   yFlip: (y: number) => number,
 ): string {
-  return pts.map((p) => `${p.x},${yFlip(p.y)}`).join(" ");
+  const parts: string[] = [];
+  for (let i = 0; i + 1 < coords.length; i += 2) {
+    parts.push(`${coords[i]},${yFlip(coords[i + 1])}`);
+  }
+  return parts.join(" ");
 }
 
 /** Map mathematical Y-up to SVG Y-down inside viewBox. */
@@ -26,7 +31,7 @@ export interface BBox {
   maxY: number;
 }
 
-export function computeBBox(entities: readonly EntityRecord[]): BBox | null {
+export function computeBBox(entities: readonly Entity2D[]): BBox | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -38,42 +43,66 @@ export function computeBBox(entities: readonly EntityRecord[]): BBox | null {
     maxY = Math.max(maxY, y);
   };
 
+  const addCoordsPairs = (coords: readonly number[]) => {
+    for (let i = 0; i + 1 < coords.length; i += 2) {
+      add(coords[i], coords[i + 1]);
+    }
+  };
+
   for (const e of entities) {
-    switch (e.kind) {
+    const c = e.coords;
+    switch (e.type) {
       case "point":
-        add(e.x, e.y);
+        if (c.length >= 2) {
+          add(c[0], c[1]);
+        }
         break;
       case "line":
-        add(e.x1, e.y1);
-        add(e.x2, e.y2);
+        if (c.length >= 4) {
+          add(c[0], c[1]);
+          add(c[2], c[3]);
+        }
         break;
       case "circle":
-        add(e.cx - e.radius, e.cy - e.radius);
-        add(e.cx + e.radius, e.cy + e.radius);
-        break;
-      case "arc": {
-        const steps = 24;
-        const t0 = e.startAngle;
-        const t1 = e.endAngle;
-        let delta = t1 - t0;
-        while (delta <= 0) {
-          delta += Math.PI * 2;
-        }
-        for (let i = 0; i <= steps; i++) {
-          const t = t0 + (delta * i) / steps;
-          add(e.cx + e.radius * Math.cos(t), e.cy + e.radius * Math.sin(t));
+        if (c.length >= 3) {
+          const cx = c[0];
+          const cy = c[1];
+          const r = c[2];
+          add(cx - r, cy - r);
+          add(cx + r, cy + r);
         }
         break;
-      }
+      case "arc":
+        if (c.length >= 5) {
+          const cx = c[0];
+          const cy = c[1];
+          const radius = c[2];
+          const t0 = c[3];
+          const t1 = c[4];
+          const steps = 24;
+          let delta = t1 - t0;
+          while (delta <= 0) {
+            delta += Math.PI * 2;
+          }
+          for (let i = 0; i <= steps; i++) {
+            const t = t0 + (delta * i) / steps;
+            add(cx + radius * Math.cos(t), cy + radius * Math.sin(t));
+          }
+        }
+        break;
       case "rectangle":
-        add(e.x, e.y);
-        add(e.x + e.width, e.y + e.height);
+        if (c.length >= 4) {
+          const x = c[0];
+          const y = c[1];
+          const width = c[2];
+          const height = c[3];
+          add(x, y);
+          add(x + width, y + height);
+        }
         break;
       case "polygon":
       case "polyline":
-        for (const p of e.points) {
-          add(p.x, p.y);
-        }
+        addCoordsPairs(c);
         break;
       default:
         break;
@@ -109,7 +138,7 @@ function arcPath(
 /**
  * Minimal wireframe SVG. Coordinates are mm; Y is mathematical (up); flipped for SVG.
  */
-export function entitiesToSvg(entities: readonly EntityRecord[]): string {
+export function entitiesToSvg(entities: readonly Entity2D[]): string {
   if (entities.length === 0) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="1" y="1" width="98" height="98" fill="none" stroke="#999" stroke-dasharray="4 2"/><text x="50" y="50" text-anchor="middle" font-size="8" fill="#666">empty</text></svg>`;
   }
@@ -128,40 +157,64 @@ export function entitiesToSvg(entities: readonly EntityRecord[]): string {
 
   const parts: string[] = [];
   for (const e of entities) {
-    switch (e.kind) {
+    const c = e.coords;
+    switch (e.type) {
       case "point": {
-        const px = e.x;
-        const py = yFlip(e.y);
+        if (c.length < 2) {
+          break;
+        }
+        const px = c[0];
+        const py = yFlip(c[1]);
         parts.push(
           `<circle cx="${px}" cy="${py}" r="1.2" fill="none" stroke="#222" stroke-width="0.3"/>`,
         );
         break;
       }
       case "line":
-        parts.push(
-          `<line x1="${e.x1}" y1="${yFlip(e.y1)}" x2="${e.x2}" y2="${yFlip(e.y2)}" stroke="#222" stroke-width="0.25" fill="none"/>`,
-        );
+        if (c.length >= 4) {
+          parts.push(
+            `<line x1="${c[0]}" y1="${yFlip(c[1])}" x2="${c[2]}" y2="${yFlip(c[3])}" stroke="#222" stroke-width="0.25" fill="none"/>`,
+          );
+        }
         break;
       case "circle":
-        parts.push(
-          `<circle cx="${e.cx}" cy="${yFlip(e.cy)}" r="${e.radius}" fill="none" stroke="#222" stroke-width="0.25"/>`,
-        );
+        if (c.length >= 3) {
+          parts.push(
+            `<circle cx="${c[0]}" cy="${yFlip(c[1])}" r="${c[2]}" fill="none" stroke="#222" stroke-width="0.25"/>`,
+          );
+        }
         break;
       case "arc":
-        parts.push(
-          `<path d="${escapeAttr(arcPath(e.cx, e.cy, e.radius, e.startAngle, e.endAngle, yFlip))}" fill="none" stroke="#222" stroke-width="0.25"/>`,
-        );
+        if (c.length >= 5) {
+          parts.push(
+            `<path d="${escapeAttr(arcPath(c[0], c[1], c[2], c[3], c[4], yFlip))}" fill="none" stroke="#222" stroke-width="0.25"/>`,
+          );
+        }
         break;
       case "rectangle": {
-        const ry = e.cornerRadius ?? 0;
+        if (c.length < 4) {
+          break;
+        }
+        const x = c[0];
+        const y = c[1];
+        const width = c[2];
+        const height = c[3];
+        const ry =
+          typeof e.properties?.cornerRadius === "number"
+            ? e.properties.cornerRadius
+            : 0;
         parts.push(
-          `<rect x="${e.x}" y="${yFlip(e.y + e.height)}" width="${e.width}" height="${e.height}" rx="${ry}" fill="none" stroke="#222" stroke-width="0.25"/>`,
+          `<rect x="${x}" y="${yFlip(y + height)}" width="${width}" height="${height}" rx="${ry}" fill="none" stroke="#222" stroke-width="0.25"/>`,
         );
         break;
       }
       case "polygon": {
-        const pts = pointString(e.points, yFlip);
-        if (e.closed && e.points.length > 0) {
+        const pts = coordsToPointString(c, yFlip);
+        if (c.length < 2) {
+          break;
+        }
+        const closed = e.properties?.closed !== false;
+        if (closed) {
           parts.push(
             `<polygon points="${escapeAttr(pts)}" fill="none" stroke="#222" stroke-width="0.25"/>`,
           );
@@ -173,8 +226,11 @@ export function entitiesToSvg(entities: readonly EntityRecord[]): string {
         break;
       }
       case "polyline": {
-        const pts = pointString(e.points, yFlip);
-        if (e.closed && e.points.length > 0) {
+        const pts = coordsToPointString(c, yFlip);
+        if (c.length < 2) {
+          break;
+        }
+        if (e.closed) {
           parts.push(
             `<polygon points="${escapeAttr(pts)}" fill="none" stroke="#222" stroke-width="0.25"/>`,
           );

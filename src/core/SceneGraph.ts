@@ -4,6 +4,7 @@ import type {
   EntityId,
   Layer,
   NewEntity2D,
+  PolylineEntity,
   ProjectMetadata,
 } from "./types.js";
 
@@ -131,6 +132,15 @@ export class SceneGraph {
     this.touch();
   }
 
+  setLayerColor(name: string, color: string | undefined): void {
+    const layer = this.layers.get(name);
+    if (!layer) {
+      throw new Error(`Unknown layer "${name}"`);
+    }
+    layer.color = color;
+    this.touch();
+  }
+
   getLayers(): ReadonlyMap<string, Layer> {
     return this.layers;
   }
@@ -255,13 +265,14 @@ export class SceneGraph {
     const layer = opts?.layer ?? DEFAULT_LAYER;
     this.resolveLayerName(layer);
     this.assertLayerUnlocked(layer);
-    return this.addEntity({
+    const poly: Omit<PolylineEntity, "id"> = {
       type: "polyline",
       coords: [...coords],
       closed: opts?.closed,
       layer,
       properties: opts?.properties,
-    });
+    };
+    return this.addEntity(poly as NewEntity2D);
   }
 
   listEntities(): readonly Entity2D[] {
