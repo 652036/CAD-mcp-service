@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerPrompts } from "../prompts/register.js";
 import { registerResources } from "../resources/register.js";
 import { registerTools } from "../tools/register.js";
+import { registerProjectFileTools } from "../tools/projectFileTools.js";
 import { CadSession } from "../session/index.js";
 import { SERVER_VERSION } from "../version.js";
 
@@ -12,6 +13,7 @@ export async function createCadMcpServer(): Promise<McpServer> {
   );
   const session = new CadSession();
   registerTools(server, session);
+  registerProjectFileTools(server, session);
   registerResources(server, session);
   registerPrompts(server);
   return server;
