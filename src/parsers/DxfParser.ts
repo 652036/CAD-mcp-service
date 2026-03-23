@@ -1,15 +1,36 @@
-import type { Entity2D } from "../core/types.js";
+import type { Entity2D, NewEntity2D } from "../core/types.js";
+import { importDxfToSceneData } from "./dxfImport.js";
 
 export type DxfMinimalParseResult = {
   layers: string[];
-  entities: unknown[];
+  entities: NewEntity2D[];
+  error?: string;
+  warnings?: string[];
+  skippedTypes?: string[];
 };
 
 /**
- * Minimal DXF parse stub (no file I/O). Prefer adding a real parser later instead of a heavy dependency.
+ * Minimal DXF parse (no file I/O): geometry via `dxf-parser` and `importDxfToSceneData`.
  */
-export function parseDxfMinimal(_content: string): DxfMinimalParseResult {
-  return { layers: ["0"], entities: [] };
+export function parseDxfMinimal(content: string): DxfMinimalParseResult {
+  const result = importDxfToSceneData(content);
+  if (!result.success) {
+    return {
+      layers: ["0"],
+      entities: [],
+      error: result.error ?? "DXF parse failed",
+      warnings: result.warnings,
+      skippedTypes: result.skippedTypes,
+    };
+  }
+  const layers =
+    result.layerNames.length > 0 ? result.layerNames : ["0"];
+  return {
+    layers,
+    entities: result.newEntities,
+    warnings: result.warnings,
+    skippedTypes: result.skippedTypes,
+  };
 }
 
 export type SceneSummary = Record<string, unknown>;
