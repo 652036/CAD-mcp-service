@@ -2,10 +2,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { SceneGraph } from "../core/SceneGraph.js";
 import type { Entity2D, EntityType } from "../core/types.js";
-import {
-  exportDxfFromEntities,
-  parseDxfMinimal,
-} from "../parsers/DxfParser.js";
+import { importDxfToSceneData } from "../parsers/dxfImport.js";
+import { exportDxfFromEntities } from "../parsers/DxfParser.js";
+import type { CadSession } from "../session/index.js";
 import { entitiesToSvg } from "./preview/svgPreview.js";
 import { normalizeLengthUnit, toMillimetres } from "./units.js";
 import { mcpJson } from "./mcpJson.js";
@@ -116,9 +115,16 @@ export const REGISTERED_TOOL_NAMES = [
   "render_preview_svg",
   "import_dxf",
   "export_dxf",
+  "begin_transaction",
+  "commit_transaction",
+  "rollback_transaction",
+  "push_undo_checkpoint",
+  "undo",
+  "redo",
 ] as const;
 
-export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
+export function registerTools(server: McpServer, session: CadSession): void {
+  const sceneGraph = session.sceneGraph;
   server.registerTool(
     "create_point",
     {
@@ -511,7 +517,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "import_dxf",
     {
       description:
-        "Parse DXF content (UTF-8 text or base64). MVP: stub parser does not load geometry into the scene yet.",
+        "Import DXF content (UTF-8 text or base64) into the scene: ensures layers exist and adds LINE, CIRCLE, ARC, POINT, LWPOLYLINE, and 2D POLYLINE entities (mm; arcs as radians internally).",
       inputSchema: {
         content: z.string().min(1),
         encoding: z.enum(["utf8", "base64"]).optional(),
@@ -523,13 +529,29 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
         if (args.encoding === "base64") {
           text = Buffer.from(args.content, "base64").toString("utf8");
         }
-        const parsed = parseDxfMinimal(text);
+        const {
+          layerNames,
+          newEntities,
+          warnings: parseWarnings,
+          imported,
+          skippedTypes,
+        } = importDxfToSceneData(text);
+        for (const name of layerNames) {
+          try {
+            sceneGraph.createLayer(name, {});
+          } catch {
+            /* duplicate layer */
+          }
+        }
+        const entity_ids: string[] = [];
+        for (const ent of newEntities) {
+          entity_ids.push(sceneGraph.addEntity(ent));
+        }
         return mcpJson({
           success: true,
-          data: parsed,
-          warnings: [
-            "MVP parser does not create scene entities yet; layers/entities are stub values.",
-          ],
+          entity_ids,
+          warnings: parseWarnings.length ? parseWarnings : undefined,
+          data: { imported, skippedTypes },
         });
       } catch (err) {
         return toolError(err);
@@ -563,6 +585,104 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
           entity_count: list.length,
         },
       });
+    },
+  );
+
+  server.registerTool(
+    "begin_transaction",
+    {
+      description:
+        "Start a nested editing transaction; pair with commit_transaction or rollback_transaction.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        session.beginTransaction();
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "commit_transaction",
+    {
+      description: "Commit the innermost active transaction.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        session.commitTransaction();
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "rollback_transaction",
+    {
+      description: "Discard changes since the matching begin_transaction and restore scene state.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        session.rollbackTransaction();
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "push_undo_checkpoint",
+    {
+      description:
+        "Record the current scene state on the undo stack (clears redo). Call before a batch of edits you want to revert in one step.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        session.pushUndoCheckpoint();
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "undo",
+    {
+      description: "Restore the scene to the previous undo checkpoint.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        session.undo();
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "redo",
+    {
+      description: "Re-apply the last undone scene state.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        session.redo();
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 }

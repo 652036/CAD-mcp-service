@@ -13,24 +13,24 @@ export type DxfMinimalParseResult = {
  * Minimal DXF parse (no file I/O): geometry via `dxf-parser` and `importDxfToSceneData`.
  */
 export function parseDxfMinimal(content: string): DxfMinimalParseResult {
-  const result = importDxfToSceneData(content);
-  if (!result.success) {
+  try {
+    const result = importDxfToSceneData(content);
+    const layers =
+      result.layerNames.length > 0 ? result.layerNames : ["0"];
     return {
-      layers: ["0"],
-      entities: [],
-      error: result.error ?? "DXF parse failed",
+      layers,
+      entities: result.newEntities,
       warnings: result.warnings,
       skippedTypes: result.skippedTypes,
     };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      layers: ["0"],
+      entities: [],
+      error: msg || "DXF parse failed",
+    };
   }
-  const layers =
-    result.layerNames.length > 0 ? result.layerNames : ["0"];
-  return {
-    layers,
-    entities: result.newEntities,
-    warnings: result.warnings,
-    skippedTypes: result.skippedTypes,
-  };
 }
 
 export type SceneSummary = Record<string, unknown>;
