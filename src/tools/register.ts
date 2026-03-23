@@ -6,16 +6,38 @@ import { entitiesToSvg } from "./preview/svgPreview.js";
 import { toMillimetres, type LengthUnit } from "./units.js";
 import { mcpJson } from "./mcpJson.js";
 
+const DEFAULT_LAYER = "0";
+
 const lengthUnitSchema = z.enum(["mm", "cm", "m", "in"]).optional();
 
 const pointSchema = z.object({ x: z.number(), y: z.number() });
 
-export interface EntityListFilter {
+function flatCoords(points: ReadonlyArray<{ x: number; y: number }>): number[] {
+  const out: number[] = [];
+  for (const p of points) {
+    out.push(p.x, p.y);
+  }
+  return out;
+}
+
+/** Ensure a layer name exists before creating geometry (default layer "0"). */
+function ensureLayerForCreate(sceneGraph: SceneGraph, layer?: string): string {
+  const name = layer === undefined || layer === "" ? DEFAULT_LAYER : layer;
+  if (!sceneGraph.getLayers().has(name)) {
+    try {
+      sceneGraph.createLayer(name, {});
+    } catch {
+      /* duplicate name */
+    }
+  }
+  return name;
+}
+
+type EntityListFilter = {
   kind?: EntityType | EntityType[];
-  type?: EntityType | EntityType[];
   layer?: string;
   ids?: string[];
-}
+};
 
 function parseEntityFilter(raw: unknown): EntityListFilter | undefined {
   if (raw === undefined || raw === null) {
@@ -26,18 +48,13 @@ function parseEntityFilter(raw: unknown): EntityListFilter | undefined {
   }
   const o = raw as Record<string, unknown>;
   const filter: EntityListFilter = {};
-  const applyKindOrType = (key: "kind" | "type", val: unknown) => {
-    if (typeof val === "string") {
-      filter[key] = val as EntityType;
-    } else if (Array.isArray(val)) {
-      filter[key] = val as EntityType[];
+  const k = o.kind ?? o.type;
+  if (k !== undefined) {
+    if (typeof k === "string") {
+      filter.kind = k as EntityType;
+    } else if (Array.isArray(k)) {
+      filter.kind = k as EntityType[];
     }
-  };
-  if (o.kind !== undefined) {
-    applyKindOrType("kind", o.kind);
-  }
-  if (o.type !== undefined) {
-    applyKindOrType("type", o.type);
   }
   if (typeof o.layer === "string") {
     filter.layer = o.layer;
@@ -48,28 +65,32 @@ function parseEntityFilter(raw: unknown): EntityListFilter | undefined {
   return filter;
 }
 
-function applyEntityFilter(
-  entities: readonly Entity2D[],
-  filter: EntityListFilter | undefined,
+function filterEntities(
+  list: readonly Entity2D[],
+  filter?: EntityListFilter,
 ): Entity2D[] {
+  let out = [...list];
   if (!filter) {
-    return [...entities];
+    return out;
   }
-  let list = [...entities];
   if (filter.ids?.length) {
     const set = new Set(filter.ids);
-    list = list.filter((e) => set.has(e.id));
+    out = out.filter((e) => set.has(e.id));
   }
-  const kindOrType = filter.type ?? filter.kind;
-  if (kindOrType !== undefined) {
-    const kinds = Array.isArray(kindOrType) ? kindOrType : [kindOrType];
+  if (filter.kind !== undefined) {
+    const kinds = Array.isArray(filter.kind) ? filter.kind : [filter.kind];
     const kset = new Set(kinds);
-    list = list.filter((e) => kset.has(e.type));
+    out = out.filter((e) => kset.has(e.type));
   }
   if (filter.layer !== undefined && filter.layer !== "") {
-    list = list.filter((e) => e.layer === filter.layer);
+    out = out.filter((e) => e.layer === filter.layer);
   }
-  return list;
+  return out;
+}
+
+function toolError(err: unknown): ReturnType<typeof mcpJson> {
+  const msg = err instanceof Error ? err.message : String(err);
+  return mcpJson({ success: false, error: msg });
 }
 
 export const REGISTERED_TOOL_NAMES = [
@@ -94,7 +115,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_point",
     {
       description:
-        "Create a point at (x, y). Coordinates are converted from `unit` (default mm) to internal mm. Optional `layer` is a layer name.",
+        "Create a point at (x, y). Coordinates are converted from `unit` (default mm) to internal mm. Optional `layer` is a layer name (created if missing).",
       inputSchema: {
         x: z.number(),
         y: z.number(),
@@ -103,18 +124,24 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const x = toMillimetres(args.x, unit);
-      const y = toMillimetres(args.y, unit);
-      const id = sceneGraph.createPoint([x, y], { layer: args.layer });
-      return mcpJson({ success: true, entity_ids: [id] });
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const x = toMillimetres(args.x, unit);
+        const y = toMillimetres(args.y, unit);
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createPoint([x, y], { layer });
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 
   server.registerTool(
     "create_line",
     {
-      description: "Create a line from (x1,y1) to (x2,y2). Coordinates in millimetres.",
+      description:
+        "Create a line from (x1,y1) to (x2,y2). Lengths use `unit` (default mm).",
       inputSchema: {
         x1: z.number(),
         y1: z.number(),
@@ -125,15 +152,18 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const x1 = toMillimetres(args.x1, unit);
-      const y1 = toMillimetres(args.y1, unit);
-      const x2 = toMillimetres(args.x2, unit);
-      const y2 = toMillimetres(args.y2, unit);
-      const id = sceneGraph.createLine([x1, y1, x2, y2], {
-        layer: args.layer,
-      });
-      return mcpJson({ success: true, entity_ids: [id] });
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const x1 = toMillimetres(args.x1, unit);
+        const y1 = toMillimetres(args.y1, unit);
+        const x2 = toMillimetres(args.x2, unit);
+        const y2 = toMillimetres(args.y2, unit);
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createLine([x1, y1, x2, y2], { layer });
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 
@@ -141,7 +171,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_circle",
     {
       description:
-        "Create a circle with centre (cx,cy) and radius. Values use `unit` (default mm) for lengths.",
+        "Create a circle with centre (cx,cy) and radius. Lengths use `unit` (default mm).",
       inputSchema: {
         cx: z.number(),
         cy: z.number(),
@@ -151,14 +181,17 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const cx = toMillimetres(args.cx, unit);
-      const cy = toMillimetres(args.cy, unit);
-      const radius = toMillimetres(args.radius, unit);
-      const id = sceneGraph.createCircle([cx, cy, radius], {
-        layer: args.layer,
-      });
-      return mcpJson({ success: true, entity_ids: [id] });
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const cx = toMillimetres(args.cx, unit);
+        const cy = toMillimetres(args.cy, unit);
+        const radius = toMillimetres(args.radius, unit);
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createCircle([cx, cy, radius], { layer });
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 
@@ -166,7 +199,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_arc",
     {
       description:
-        "Create a circular arc: centre (cx,cy), radius, startAngle and endAngle in **radians** (counterclockwise from +X; mathematical Y-up). Lengths use `unit` (default mm).",
+        "Create a circular arc: centre (cx,cy), radius, startAngle and endAngle in **radians** (counterclockwise from +X; mathematical Y-up). Radius uses `unit` (default mm). Stored as coords [cx,cy,r,startAngle,endAngle] in mm.",
       inputSchema: {
         cx: z.number(),
         cy: z.number(),
@@ -178,15 +211,20 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const cx = toMillimetres(args.cx, unit);
-      const cy = toMillimetres(args.cy, unit);
-      const radius = toMillimetres(args.radius, unit);
-      const id = sceneGraph.createArc(
-        [cx, cy, radius, args.startAngle, args.endAngle],
-        { layer: args.layer },
-      );
-      return mcpJson({ success: true, entity_ids: [id] });
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const cx = toMillimetres(args.cx, unit);
+        const cy = toMillimetres(args.cy, unit);
+        const radius = toMillimetres(args.radius, unit);
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createArc(
+          [cx, cy, radius, args.startAngle, args.endAngle],
+          { layer },
+        );
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 
@@ -194,7 +232,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_rectangle",
     {
       description:
-        "Axis-aligned rectangle: corner (x,y), width, height, optional cornerRadius. Lengths use `unit` (default mm). Y increases upward; (x,y) is the lower-left corner.",
+        "Axis-aligned rectangle: corner (x,y), width, height, optional cornerRadius. Lengths use `unit` (default mm). Y increases upward; (x,y) is the lower-left corner. Stored as coords [x,y,width,height] in mm; cornerRadius in properties.",
       inputSchema: {
         x: z.number(),
         y: z.number(),
@@ -206,22 +244,26 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const x = toMillimetres(args.x, unit);
-      const y = toMillimetres(args.y, unit);
-      const width = toMillimetres(args.width, unit);
-      const height = toMillimetres(args.height, unit);
-      const cornerRadius =
-        args.cornerRadius !== undefined
-          ? toMillimetres(args.cornerRadius, unit)
-          : undefined;
-      const properties =
-        cornerRadius !== undefined ? { cornerRadius } : undefined;
-      const id = sceneGraph.createRectangle([x, y, width, height], {
-        layer: args.layer,
-        properties,
-      });
-      return mcpJson({ success: true, entity_ids: [id] });
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const x = toMillimetres(args.x, unit);
+        const y = toMillimetres(args.y, unit);
+        const width = toMillimetres(args.width, unit);
+        const height = toMillimetres(args.height, unit);
+        const cornerRadius =
+          args.cornerRadius !== undefined
+            ? toMillimetres(args.cornerRadius, unit)
+            : undefined;
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createRectangle([x, y, width, height], {
+          layer,
+          properties:
+            cornerRadius !== undefined ? { cornerRadius } : undefined,
+        });
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 
@@ -229,7 +271,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_polygon",
     {
       description:
-        "Create a polygon or open path from vertices. `closed` controls whether the path is closed. Points use `unit` (default mm).",
+        "Create a polygon path from vertices. `closed` selects closed vs open stroke in preview (stored on entity properties). Points use `unit` (default mm).",
       inputSchema: {
         points: z.array(pointSchema).min(1),
         closed: z.boolean(),
@@ -238,18 +280,21 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const coords: number[] = [];
-      for (const p of args.points) {
-        coords.push(toMillimetres(p.x, unit), toMillimetres(p.y, unit));
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const pts = args.points.map((p) => ({
+          x: toMillimetres(p.x, unit),
+          y: toMillimetres(p.y, unit),
+        }));
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createPolygon(flatCoords(pts), {
+          layer,
+          properties: { closed: args.closed },
+        });
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
       }
-      const id = args.closed
-        ? sceneGraph.createPolygon(coords, { layer: args.layer })
-        : sceneGraph.createPolyline(coords, {
-            closed: false,
-            layer: args.layer,
-          });
-      return mcpJson({ success: true, entity_ids: [id] });
     },
   );
 
@@ -257,7 +302,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_polyline",
     {
       description:
-        "Create a polyline. If `closed` is true, the first and last vertices are joined. Points use `unit` (default mm).",
+        "Create a polyline. If `closed` is true, stroke is closed in SVG preview. Points use `unit` (default mm).",
       inputSchema: {
         points: z.array(pointSchema).min(1),
         closed: z.boolean(),
@@ -266,16 +311,21 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const unit = (args.unit ?? "mm") as LengthUnit;
-      const coords: number[] = [];
-      for (const p of args.points) {
-        coords.push(toMillimetres(p.x, unit), toMillimetres(p.y, unit));
+      try {
+        const unit = (args.unit ?? "mm") as LengthUnit;
+        const pts = args.points.map((p) => ({
+          x: toMillimetres(p.x, unit),
+          y: toMillimetres(p.y, unit),
+        }));
+        const layer = ensureLayerForCreate(sceneGraph, args.layer);
+        const id = sceneGraph.createPolyline(flatCoords(pts), {
+          closed: args.closed,
+          layer,
+        });
+        return mcpJson({ success: true, entity_ids: [id] });
+      } catch (err) {
+        return toolError(err);
       }
-      const id = sceneGraph.createPolyline(coords, {
-        closed: args.closed,
-        layer: args.layer,
-      });
-      return mcpJson({ success: true, entity_ids: [id] });
     },
   );
 
@@ -283,28 +333,33 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "create_layer",
     {
       description:
-        "Create a named layer with optional stroke color (e.g. #ff0000). If the name already exists, optionally updates color and returns a warning.",
+        "Create a named layer with optional color (e.g. #ff0000). Layers are keyed by name; default geometry layer is \"0\".",
       inputSchema: {
         name: z.string().min(1),
         color: z.string().optional(),
       },
     },
     async (args) => {
-      if (sceneGraph.getLayers().has(args.name)) {
-        if (args.color !== undefined) {
-          sceneGraph.setLayerColor(args.name, args.color);
-        }
+      try {
+        sceneGraph.createLayer(args.name, { color: args.color });
         return mcpJson({
           success: true,
-          data: { name: args.name },
-          warnings: ["Layer already existed."],
+          data: { name: args.name, layer: sceneGraph.getLayers().get(args.name) },
         });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("already exists")) {
+          return mcpJson({
+            success: true,
+            data: {
+              name: args.name,
+              layer: sceneGraph.getLayers().get(args.name),
+            },
+            warnings: ["Layer already existed."],
+          });
+        }
+        return mcpJson({ success: false, error: msg });
       }
-      sceneGraph.createLayer(args.name, { color: args.color });
-      return mcpJson({
-        success: true,
-        data: { name: args.name },
-      });
     },
   );
 
@@ -318,24 +373,28 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      const r = sceneGraph.setEntityLayer(args.entity_ids, args.layer_name);
-      if (r.missingLayer) {
+      try {
+        const r = sceneGraph.setEntityLayer(args.entity_ids, args.layer_name);
+        if (r.missingLayer) {
+          return mcpJson({
+            success: false,
+            error: `Layer not found: ${args.layer_name}`,
+            data: { not_found: r.notFound },
+          });
+        }
+        const warnings: string[] = [];
+        if (r.notFound.length) {
+          warnings.push(`Unknown entity ids: ${r.notFound.join(", ")}`);
+        }
         return mcpJson({
-          success: false,
-          error: `Layer not found: ${args.layer_name}`,
-          data: { not_found: r.notFound },
+          success: true,
+          entity_ids: r.updated,
+          data: { updated: r.updated, not_found: r.notFound },
+          warnings: warnings.length ? warnings : undefined,
         });
+      } catch (err) {
+        return toolError(err);
       }
-      const warnings: string[] = [];
-      if (r.notFound.length) {
-        warnings.push(`Unknown entity ids: ${r.notFound.join(", ")}`);
-      }
-      return mcpJson({
-        success: true,
-        entity_ids: r.updated,
-        data: { updated: r.updated, not_found: r.notFound },
-        warnings: warnings.length ? warnings : undefined,
-      });
     },
   );
 
@@ -343,18 +402,22 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     "list_entities",
     {
       description:
-        "List entities. Optional `filter` object: { kind?, type?, layer?, ids? } where kind/type is a string or string[] (entity type: point, line, …).",
+        "List entities. Optional `filter`: { kind or type?, layer?, ids? } — kind/type is an EntityType string or array (point, line, circle, arc, rectangle, polygon, polyline).",
       inputSchema: {
         filter: z.record(z.string(), z.unknown()).optional(),
       },
     },
     async (args) => {
-      const filter = parseEntityFilter(args.filter);
-      const list = applyEntityFilter(sceneGraph.listEntities(), filter);
-      return mcpJson({
-        success: true,
-        data: { entities: list, count: list.length },
-      });
+      try {
+        const filter = parseEntityFilter(args.filter);
+        const list = filterEntities(sceneGraph.listEntities(), filter);
+        return mcpJson({
+          success: true,
+          data: { entities: list, count: list.length },
+        });
+      } catch (err) {
+        return toolError(err);
+      }
     },
   );
 
@@ -398,14 +461,18 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       inputSchema: { entity_id: z.string().min(1) },
     },
     async (args) => {
-      const ok = sceneGraph.deleteEntity(args.entity_id);
-      if (!ok) {
-        return mcpJson({
-          success: false,
-          error: `Entity not found: ${args.entity_id}`,
-        });
+      try {
+        const ok = sceneGraph.deleteEntity(args.entity_id);
+        if (!ok) {
+          return mcpJson({
+            success: false,
+            error: `Entity not found: ${args.entity_id}`,
+          });
+        }
+        return mcpJson({ success: true, data: { deleted: args.entity_id } });
+      } catch (err) {
+        return toolError(err);
       }
-      return mcpJson({ success: true, data: { deleted: args.entity_id } });
     },
   );
 
@@ -419,7 +486,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       },
     },
     async (args) => {
-      let list = sceneGraph.listEntities();
+      let list = [...sceneGraph.listEntities()];
       if (args.entity_ids?.length) {
         const set = new Set(args.entity_ids);
         list = list.filter((e) => set.has(e.id));
