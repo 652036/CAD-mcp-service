@@ -529,13 +529,21 @@ export function registerTools(server: McpServer, session: CadSession): void {
         if (args.encoding === "base64") {
           text = Buffer.from(args.content, "base64").toString("utf8");
         }
+        const result = importDxfToSceneData(text);
+        if (!result.success) {
+          return mcpJson({
+            success: false,
+            error: result.error ?? "DXF parse failed",
+            data: { skippedTypes: result.skippedTypes },
+          });
+        }
         const {
           layerNames,
           newEntities,
           warnings: parseWarnings,
           imported,
           skippedTypes,
-        } = importDxfToSceneData(text);
+        } = result;
         for (const name of layerNames) {
           try {
             sceneGraph.createLayer(name, {});
