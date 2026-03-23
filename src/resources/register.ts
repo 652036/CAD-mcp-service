@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { SceneGraph } from "../core/SceneGraph.js";
+import type { CadSession } from "../session/index.js";
 import {
   blocksLibraryPlaceholder,
   materialsLibraryPlaceholder,
@@ -10,7 +10,8 @@ function jsonResourceBody(data: unknown): string {
   return JSON.stringify(data, null, 0);
 }
 
-export function registerResources(server: McpServer, sceneGraph: SceneGraph): void {
+export function registerResources(server: McpServer, session: CadSession): void {
+  const sceneGraph = session.sceneGraph;
   server.registerResource(
     "cad-project-current",
     "cad://project/current",
@@ -104,6 +105,25 @@ export function registerResources(server: McpServer, sceneGraph: SceneGraph): vo
           uri: uri.href,
           mimeType: "application/json",
           text: jsonResourceBody({}),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-history-undo-stack",
+    "cad://history/undo_stack",
+    {
+      title: "Undo / redo stack depths",
+      description: "Current undo and redo stack sizes (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(session.getUndoRedoDepths()),
         },
       ],
     }),

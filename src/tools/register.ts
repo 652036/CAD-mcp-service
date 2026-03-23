@@ -5,6 +5,7 @@ import type { Entity2D, EntityType } from "../core/types.js";
 import { importDxfToSceneData } from "../parsers/dxfImport.js";
 import { exportDxfFromEntities } from "../parsers/DxfParser.js";
 import type { CadSession } from "../session/index.js";
+import { registerProjectFileTools } from "./projectFileTools.js";
 import { entitiesToSvg } from "./preview/svgPreview.js";
 import { normalizeLengthUnit, toMillimetres } from "./units.js";
 import { mcpJson } from "./mcpJson.js";
@@ -121,9 +122,13 @@ export const REGISTERED_TOOL_NAMES = [
   "push_undo_checkpoint",
   "undo",
   "redo",
+  "new_project",
+  "save_project",
+  "load_project",
 ] as const;
 
 export function registerTools(server: McpServer, session: CadSession): void {
+  registerProjectFileTools(server, session);
   const sceneGraph = session.sceneGraph;
   server.registerTool(
     "create_point",

@@ -12,7 +12,7 @@ export async function createCadMcpServer(): Promise<McpServer> {
   );
   const session = new CadSession();
   registerTools(server, session);
-  registerResources(server, session.sceneGraph);
+  registerResources(server, session);
   registerPrompts(server);
   return server;
 }

@@ -51,4 +51,31 @@ export class CadSession {
     const next = this.redoStack.pop()!;
     this.sceneGraph.restoreSnapshot(next);
   }
+
+  getUndoRedoDepths(): { undo: number; redo: number } {
+    return { undo: this.undoStack.length, redo: this.redoStack.length };
+  }
+
+  clearUndoRedo(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
+  loadSnapshot(snapshot: SceneSnapshotV1): void {
+    this.sceneGraph.restoreSnapshot(snapshot);
+    this.clearUndoRedo();
+  }
+
+  newEmptyScene(name?: string): void {
+    const now = new Date().toISOString();
+    const empty: SceneSnapshotV1 = {
+      version: 1,
+      projectName: name !== undefined && name !== "" ? name : "Untitled",
+      updatedAt: now,
+      layers: [{ name: "0", visible: true, locked: false }],
+      entities: [],
+    };
+    this.sceneGraph.restoreSnapshot(empty);
+    this.clearUndoRedo();
+  }
 }
