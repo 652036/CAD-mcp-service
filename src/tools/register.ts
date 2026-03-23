@@ -2,13 +2,19 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { SceneGraph } from "../core/SceneGraph.js";
 import type { Entity2D, EntityType } from "../core/types.js";
+import {
+  exportDxfFromEntities,
+  parseDxfMinimal,
+} from "../parsers/DxfParser.js";
 import { entitiesToSvg } from "./preview/svgPreview.js";
-import { toMillimetres, type LengthUnit } from "./units.js";
+import { normalizeLengthUnit, toMillimetres } from "./units.js";
 import { mcpJson } from "./mcpJson.js";
 
 const DEFAULT_LAYER = "0";
 
-const lengthUnitSchema = z.enum(["mm", "cm", "m", "in"]).optional();
+const lengthUnitSchema = z
+  .enum(["mm", "cm", "m", "in", "inch", "ft"])
+  .optional();
 
 const pointSchema = z.object({ x: z.number(), y: z.number() });
 
@@ -108,6 +114,8 @@ export const REGISTERED_TOOL_NAMES = [
   "get_entity_properties",
   "delete_entity",
   "render_preview_svg",
+  "import_dxf",
+  "export_dxf",
 ] as const;
 
 export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
@@ -125,7 +133,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const x = toMillimetres(args.x, unit);
         const y = toMillimetres(args.y, unit);
         const layer = ensureLayerForCreate(sceneGraph, args.layer);
@@ -153,7 +161,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const x1 = toMillimetres(args.x1, unit);
         const y1 = toMillimetres(args.y1, unit);
         const x2 = toMillimetres(args.x2, unit);
@@ -182,7 +190,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const cx = toMillimetres(args.cx, unit);
         const cy = toMillimetres(args.cy, unit);
         const radius = toMillimetres(args.radius, unit);
@@ -212,7 +220,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const cx = toMillimetres(args.cx, unit);
         const cy = toMillimetres(args.cy, unit);
         const radius = toMillimetres(args.radius, unit);
@@ -245,7 +253,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const x = toMillimetres(args.x, unit);
         const y = toMillimetres(args.y, unit);
         const width = toMillimetres(args.width, unit);
@@ -281,7 +289,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const pts = args.points.map((p) => ({
           x: toMillimetres(p.x, unit),
           y: toMillimetres(p.y, unit),
@@ -312,7 +320,7 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
     },
     async (args) => {
       try {
-        const unit = (args.unit ?? "mm") as LengthUnit;
+        const unit = normalizeLengthUnit(args.unit);
         const pts = args.points.map((p) => ({
           x: toMillimetres(p.x, unit),
           y: toMillimetres(p.y, unit),
@@ -495,6 +503,65 @@ export function registerTools(server: McpServer, sceneGraph: SceneGraph): void {
       return mcpJson({
         success: true,
         data: { svg, entity_count: list.length },
+      });
+    },
+  );
+
+  server.registerTool(
+    "import_dxf",
+    {
+      description:
+        "Parse DXF content (UTF-8 text or base64). MVP: stub parser does not load geometry into the scene yet.",
+      inputSchema: {
+        content: z.string().min(1),
+        encoding: z.enum(["utf8", "base64"]).optional(),
+      },
+    },
+    async (args) => {
+      try {
+        let text = args.content;
+        if (args.encoding === "base64") {
+          text = Buffer.from(args.content, "base64").toString("utf8");
+        }
+        const parsed = parseDxfMinimal(text);
+        return mcpJson({
+          success: true,
+          data: parsed,
+          warnings: [
+            "MVP parser does not create scene entities yet; layers/entities are stub values.",
+          ],
+        });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "export_dxf",
+    {
+      description:
+        "Export 2D entities to DXF (internal mm). Optional entity_ids limits which entities are written.",
+      inputSchema: {
+        entity_ids: z.array(z.string()).optional(),
+      },
+    },
+    async (args) => {
+      let list = [...sceneGraph.listEntities()];
+      if (args.entity_ids?.length) {
+        const set = new Set(args.entity_ids);
+        list = list.filter((e) => set.has(e.id));
+      }
+      const dxf = exportDxfFromEntities(list);
+      const dxf_base64 = Buffer.from(dxf, "utf8").toString("base64");
+      return mcpJson({
+        success: true,
+        data: {
+          dxf,
+          dxf_base64,
+          byte_length: Buffer.byteLength(dxf, "utf8"),
+          entity_count: list.length,
+        },
       });
     },
   );
