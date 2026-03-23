@@ -8,6 +8,7 @@ import type { CadSession } from "../session/index.js";
 import { entitiesToSvg } from "./preview/svgPreview.js";
 import { normalizeLengthUnit, toMillimetres } from "./units.js";
 import { mcpJson } from "./mcpJson.js";
+import { registerProjectFileTools } from "./projectFileTools.js";
 
 const DEFAULT_LAYER = "0";
 
@@ -121,6 +122,9 @@ export const REGISTERED_TOOL_NAMES = [
   "push_undo_checkpoint",
   "undo",
   "redo",
+  "new_project",
+  "save_project",
+  "load_project",
 ] as const;
 
 export function registerTools(server: McpServer, session: CadSession): void {
@@ -693,4 +697,6 @@ export function registerTools(server: McpServer, session: CadSession): void {
       }
     },
   );
+
+  registerProjectFileTools(server, session);
 }

@@ -118,15 +118,21 @@ export function registerResources(server: McpServer, session: CadSession): void 
       description: "Current undo and redo stack sizes (JSON)",
       mimeType: "application/json",
     },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.href,
-          mimeType: "application/json",
-          text: jsonResourceBody(session.getUndoRedoDepths()),
-        },
-      ],
-    }),
+    async (uri) => {
+      const d = session.getUndoRedoDepths();
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: jsonResourceBody({
+              undo_depth: d.undo,
+              redo_depth: d.redo,
+            }),
+          },
+        ],
+      };
+    },
   );
 
   server.registerResource(
