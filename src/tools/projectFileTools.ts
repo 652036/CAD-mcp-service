@@ -43,9 +43,13 @@ export function registerProjectFileTools(
     },
     async () => {
       try {
+        const backend = await session.geometryEngine.getBackendStatus();
         return mcpJson({
           success: true,
-          data: session.sceneGraph.getProjectMetadata(),
+          data: {
+            ...session.sceneGraph.getProjectMetadata(),
+            geometryBackend: backend,
+          },
         });
       } catch (err) {
         return toolError(err);

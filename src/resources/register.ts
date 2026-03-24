@@ -33,18 +33,22 @@ export function registerResources(server: McpServer, session: CadSession): void 
       description: "Project metadata and server version (JSON)",
       mimeType: "application/json",
     },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.href,
-          mimeType: "application/json",
-          text: jsonResourceBody({
-            ...sceneGraph.getProjectMetadata(),
-            version: SERVER_VERSION,
-          }),
-        },
-      ],
-    }),
+    async (uri) => {
+      const backend = await session.geometryEngine.getBackendStatus();
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: jsonResourceBody({
+              ...sceneGraph.getProjectMetadata(),
+              version: SERVER_VERSION,
+              geometryBackend: backend,
+            }),
+          },
+        ],
+      };
+    },
   );
 
   server.registerResource(

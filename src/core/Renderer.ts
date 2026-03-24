@@ -86,4 +86,34 @@ export class Renderer {
       svg,
     };
   }
+
+  async renderImagePreview(
+    entities: readonly Entity[],
+    width = 512,
+    height = 512,
+  ): Promise<{
+    mimeType: string;
+    imageBase64: string;
+    svg: string;
+  }> {
+    const svg = this.renderSvg(entities);
+    try {
+      const sharp = (await import("sharp")).default;
+      const png = await sharp(Buffer.from(svg, "utf8"))
+        .resize(width, height, { fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .png()
+        .toBuffer();
+      return {
+        mimeType: "image/png",
+        imageBase64: png.toString("base64"),
+        svg,
+      };
+    } catch {
+      return {
+        mimeType: "image/svg+xml",
+        imageBase64: Buffer.from(svg, "utf8").toString("base64"),
+        svg,
+      };
+    }
+  }
 }

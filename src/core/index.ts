@@ -8,3 +8,4 @@ export { Renderer } from "./Renderer.js";
 export { OrganizationManager } from "./OrganizationManager.js";
 export { AssemblyManager } from "./AssemblyManager.js";
 export { DrawingManager } from "./DrawingManager.js";
+export { OpenCascadeAdapter, type OpenCascadeStatus } from "./OpenCascadeAdapter.js";

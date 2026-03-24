@@ -1,51 +1,102 @@
 # CAD MCP Server
 
-基于 [Model Context Protocol (MCP)](https://modelcontextprotocol.io) 的 **2D CAD 辅助服务**（TypeScript）。在 AI 客户端（如 Claude / Cursor）中通过 **stdio** 暴露 Tools / Resources / Prompts，用于创建简单几何、管理图层、导入导出 DXF、保存工程 JSON 等。
+TypeScript-based CAD server for the Model Context Protocol (MCP).
 
-当前版本：**0.1.0**（MVP）。
+It exposes tools, resources, and prompts over `stdio` so an MCP client can:
 
-## 功能概览
+- create and inspect 2D geometry
+- work with layers, assemblies, drawings, and project files
+- import and export DXF plus several lightweight interchange formats
+- render previews
+- connect to a running AutoCAD instance on Windows through COM
 
-- **2D 图元**：点、线、圆、弧、矩形、多边形、折线；内部单位 **毫米**，创建时可指定 `mm` / `cm` / `m` / `in`（`inch` 同义）/ `ft`。
-- **图层**：创建、列表、将实体指定到图层。
-- **DXF**：使用 `dxf-parser` 导入（LINE、CIRCLE、ARC、POINT、LWPOLYLINE 等；部分实体类型会跳过）；导出为 R12 风格文本（可带 `dxf_base64`）。
-- **预览**：`render_preview_svg` 生成线框 SVG。
-- **事务与撤销**：`begin_transaction` / `commit_transaction` / `rollback_transaction`；`push_undo_checkpoint` / `undo` / `redo`。
-- **工程文件**：`new_project`、`save_project`、`load_project`（JSON 格式 `cad-mcp-project`，v1）。
-- **Resources**：`cad://project/current`、`cad://entities/list`、`cad://layers/list`、`cad://history/undo_stack` 等只读资源。
-- **Prompts**：会话引导与设计类预置提示（如 `design_part`、`generate_drawing` 等）。
+## Status
 
-## 环境要求
+This repository is still an MVP-style CAD service, but it now includes:
 
-- Node.js **18+**（推荐 20+）
+- broad 2D and lightweight 3D tool coverage
+- PNG preview rendering through `sharp`, with SVG fallback
+- OpenCascade runtime status reporting
+- a Node-compatible OpenCascade fallback loader for `opencascade.js`
+- direct AutoCAD 2024 integration tools on Windows
+
+## Features
+
+### Internal CAD session
+
+- 2D entities: point, line, circle, arc, rectangle, polygon, polyline
+- layers: create, rename, delete, visibility, lock, color
+- modify tools: translate, rotate, mirror, offset, trim, extend, array
+- constraints, annotations, assemblies, drawings, and analysis helpers
+- transactions and undo/redo
+- JSON project save/load
+
+### File and preview support
+
+- DXF import and export
+- SVG, PDF-underlay, STEP-like, STL-like, OBJ-like, IGES-like, and GLTF-like workflows
+- preview generation as SVG or PNG
+
+### OpenCascade integration
+
+- reports whether the runtime backend is using mock geometry or OpenCascade
+- includes a compatibility fallback for environments where `opencascade.js` package-root loading fails under modern Node ESM runtimes
+
+### AutoCAD integration
+
+On Windows, the server can connect to a running AutoCAD instance through COM and expose live-document tools such as:
+
+- `autocad_status`
+- `autocad_list_layers`
+- `autocad_list_modelspace_entities`
+- `autocad_send_command`
+
+This is separate from the internal in-memory CAD session. The AutoCAD tools act on the real AutoCAD document that is currently open.
+
+## Requirements
+
+- Node.js 18+
 - npm
+- Windows for AutoCAD COM integration
+- AutoCAD running locally if you want to use the `autocad_*` tools
 
-## 安装与构建
+Node 20+ is recommended.
+
+## Install
 
 ```bash
 npm install
+```
+
+## Build
+
+```bash
 npm run build
 ```
 
-## 测试
+## Test
 
 ```bash
 npm test
 ```
 
-## 运行（MCP stdio）
+## Run
 
-本进程由 MCP 宿主 **拉起**，通过标准输入输出通信，一般不单独当 HTTP 服务使用。
+The MCP host should launch this server over `stdio`.
 
 ```bash
 npm start
-# 等价于
+```
+
+Equivalent:
+
+```bash
 node dist/index.js
 ```
 
-### 在编辑器中配置 MCP
+## MCP Configuration
 
-可参考仓库根目录的 `mcp.config.example.json`，将 `${workspaceFolder}` 换成本地克隆路径，并确保已执行 `npm run build`：
+Example configuration:
 
 ```json
 {
@@ -59,32 +110,45 @@ node dist/index.js
 }
 ```
 
-具体键名因客户端而异（如 Cursor、Claude Desktop 等），请对照其 MCP 配置文档粘贴或改写。
+After rebuilding the server, restart or reload your MCP host so new tools are picked up.
 
-## 工程文件格式（v1）
+## Main Tool Groups
 
-保存/加载的 JSON 需满足：
+- geometry creation and editing
+- layer management
+- query and measurement tools
+- assembly and drawing tools
+- topology and boolean tools
+- project file tools
+- AutoCAD bridge tools
 
-- `format`: `"cad-mcp-project"`
+## Project File Format
+
+Saved project files use:
+
+- `format`: `cad-mcp-project`
 - `formatVersion`: `1`
-- `savedAt`: ISO 8601 字符串
-- `snapshot`: 场景快照（图层列表 + 实体列表，与内部 `SceneSnapshotV1` 一致）
+- `savedAt`: ISO 8601 string
+- `snapshot`: serialized session snapshot
 
-## 脚本说明
+## Repository Additions
 
-| 脚本 | 说明 |
-|------|------|
-| `npm run build` | `tsc` 编译到 `dist/` |
-| `npm run start` | 运行编译后的 MCP 服务 |
-| `npm run dev` | `tsc --watch` 监听编译 |
-| `npm test` | `tsx` 运行 `tests/*.test.ts` |
+- `src/core/OpenCascadeAdapter.ts`: OpenCascade runtime loader and compatibility fallback
+- `src/integrations/AutoCadComBridge.ts`: Windows COM bridge for live AutoCAD access
+- `src/tools/autocadTools.ts`: MCP tool registration for AutoCAD operations
+- `python/occt_bridge.py`: placeholder bridge entrypoint for future Python-based OCCT work
+- `python/mesh_analysis.py`: placeholder heavy-analysis process entrypoint
+- `assets/blocks/`: starter block library folder
+- `assets/materials/materials.json`: starter material metadata
+- `assets/templates/a3-landscape.json`: starter drawing template metadata
 
-## 限制与后续方向
+## Limitations
 
-- 无完整参数化约束求解、无 3D 内核（OpenCASCADE 等）。
-- DXF 导入对部分实体类型与多段线 **bulge** 支持有限；多图层 DXF 导出在图层表上仍为 MVP 级别。
-- `cad://preview/current` 资源仅为文字提示，实际预览请使用 **`render_preview_svg`** 工具。
+- DWG import/export still requires an external ODA-compatible converter and is not bundled
+- direct AutoCAD integration currently targets running local AutoCAD through COM on Windows
+- some DXF entity types and advanced polyline bulge cases still have limited support
+- the internal CAD session and the live AutoCAD bridge are related but distinct workflows
 
-## 许可证
+## License
 
-ISC（见 `package.json`）。
+ISC

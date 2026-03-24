@@ -2,13 +2,20 @@ import { randomUUID } from "node:crypto";
 import type { Entity, Entity3D, NewEntity3D } from "./types.js";
 import { SceneGraph } from "./SceneGraph.js";
 import { is3dEntity } from "../utils/entityKinds.js";
+import { OpenCascadeAdapter, type OpenCascadeStatus } from "./OpenCascadeAdapter.js";
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export class GeometryEngine {
+  private readonly occtAdapter = new OpenCascadeAdapter();
+
   constructor(private readonly sceneGraph: SceneGraph) {}
+
+  async getBackendStatus(): Promise<OpenCascadeStatus> {
+    return this.occtAdapter.getStatus();
+  }
 
   createSolid(entity: NewEntity3D): string {
     return this.sceneGraph.addEntity(entity);

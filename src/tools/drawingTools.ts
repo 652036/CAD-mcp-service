@@ -186,7 +186,11 @@ export function registerDrawingTools(
       const entities = session.sceneGraph
         .listEntities()
         .filter((entity) => (set ? set.has(entity.id) : true));
-      const preview = session.renderer.renderBase64Preview(entities);
+      const preview = await session.renderer.renderImagePreview(
+        entities,
+        args.width ?? 512,
+        args.height ?? 512,
+      );
       return mcpJson({
         success: true,
         data: {

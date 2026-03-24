@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { CadSession } from "../src/session/CadSession.js";
 import { parseStepLikeContent } from "../src/parsers/StepParser.js";
 import { parseStlLikeContent } from "../src/parsers/StlParser.js";
@@ -64,4 +65,37 @@ test("Assembly manager stores components and exploded views", () => {
   const stored = session.assemblyManager.getAssembly(assembly.id);
   assert.equal(stored?.components.length, 1);
   assert.equal(stored?.explodedViews[0]?.steps.length, 1);
+});
+
+test("Renderer can produce preview payloads", async () => {
+  const session = new CadSession();
+  session.sceneGraph.createCircle([0, 0, 10]);
+  const preview = await session.renderer.renderImagePreview(
+    session.sceneGraph.listEntities(),
+    128,
+    128,
+  );
+
+  assert.ok(preview.imageBase64.length > 0);
+  assert.ok(
+    preview.mimeType === "image/png" || preview.mimeType === "image/svg+xml",
+  );
+});
+
+test("Geometry backend status is reported", async () => {
+  const session = new CadSession();
+  const backend = await session.geometryEngine.getBackendStatus();
+
+  assert.ok(
+    backend.backend === "occt" ||
+      backend.backend === "mock" ||
+      backend.backend === "occt-error",
+  );
+});
+
+test("Python bridge and asset scaffolding exist", () => {
+  assert.equal(existsSync("python/occt_bridge.py"), true);
+  assert.equal(existsSync("python/mesh_analysis.py"), true);
+  assert.equal(existsSync("assets/materials/materials.json"), true);
+  assert.equal(existsSync("assets/templates/a3-landscape.json"), true);
 });

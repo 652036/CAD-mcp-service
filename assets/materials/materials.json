@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "materials": [
+    {
+      "id": "steel_mild",
+      "name": "Mild Steel",
+      "densityKgM3": 7850
+    },
+    {
+      "id": "aluminum_6061",
+      "name": "Aluminum 6061",
+      "densityKgM3": 2700
+    },
+    {
+      "id": "abs",
+      "name": "ABS",
+      "densityKgM3": 1040
+    }
+  ]
+}

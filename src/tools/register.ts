@@ -23,6 +23,7 @@ import { DRAWING_TOOL_NAMES, registerDrawingTools } from "./drawingTools.js";
 import { IO_TOOL_NAMES, registerIoTools } from "./ioTools.js";
 import { ADVANCED_2D_TOOL_NAMES, registerAdvanced2dTools } from "./advanced2dTools.js";
 import { TOPOLOGY_TOOL_NAMES, registerTopologyTools } from "./topologyTools.js";
+import { AUTOCAD_TOOL_NAMES, registerAutoCadTools } from "./autocadTools.js";
 
 const DEFAULT_LAYER = "0";
 
@@ -173,6 +174,7 @@ export const REGISTERED_TOOL_NAMES = [
   ...IO_TOOL_NAMES,
   ...ADVANCED_2D_TOOL_NAMES,
   ...TOPOLOGY_TOOL_NAMES,
+  ...AUTOCAD_TOOL_NAMES,
 ] as const;
 
 export function registerTools(server: McpServer, session: CadSession): void {
@@ -766,4 +768,5 @@ export function registerTools(server: McpServer, session: CadSession): void {
   registerAdvanced2dTools(server, session);
   registerTopologyTools(server, session);
   registerProjectFileTools(server, session);
+  registerAutoCadTools(server);
 }
