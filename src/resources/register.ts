@@ -1,13 +1,26 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CadSession } from "../session/index.js";
 import {
+  ansiStandardResource,
   blocksLibraryPlaceholder,
+  dimensionStylesLibrary,
+  isoStandardResource,
+  linetypesLibrary,
   materialsLibraryPlaceholder,
+  textStylesLibrary,
 } from "./libraries.js";
 import { SERVER_VERSION } from "../version.js";
 
 function jsonResourceBody(data: unknown): string {
   return JSON.stringify(data, null, 0);
+}
+
+function visibleEntities(session: CadSession) {
+  const layers = session.sceneGraph.getLayers();
+  return session.sceneGraph.listEntities().filter((entity) => {
+    const layerName = entity.layer ?? "0";
+    return layers.get(layerName)?.visible !== false;
+  });
 }
 
 export function registerResources(server: McpServer, session: CadSession): void {
@@ -47,7 +60,7 @@ export function registerResources(server: McpServer, session: CadSession): void 
         {
           uri: uri.href,
           mimeType: "application/json",
-          text: jsonResourceBody([...sceneGraph.listEntities()]),
+          text: jsonResourceBody(visibleEntities(session)),
         },
       ],
     }),
@@ -77,15 +90,15 @@ export function registerResources(server: McpServer, session: CadSession): void 
     "cad://preview/current",
     {
       title: "Current preview",
-      description: "Raster/SVG preview hint for the active view",
-      mimeType: "text/plain",
+      description: "Current SVG preview for the active scene",
+      mimeType: "image/svg+xml",
     },
     async (uri) => ({
       contents: [
         {
           uri: uri.href,
-          mimeType: "text/plain",
-          text: "use render_preview_svg tool",
+          mimeType: "image/svg+xml",
+          text: session.renderer.renderSvg(visibleEntities(session)),
         },
       ],
     }),
@@ -104,7 +117,10 @@ export function registerResources(server: McpServer, session: CadSession): void 
         {
           uri: uri.href,
           mimeType: "application/json",
-          text: jsonResourceBody({}),
+          text: jsonResourceBody({
+            parameters: session.parametricEngine.listParameters(),
+            constraints: session.constraintSolver.listConstraints(),
+          }),
         },
       ],
     }),
@@ -148,7 +164,13 @@ export function registerResources(server: McpServer, session: CadSession): void 
         {
           uri: uri.href,
           mimeType: "application/json",
-          text: jsonResourceBody(blocksLibraryPlaceholder),
+          text: jsonResourceBody({
+            ...blocksLibraryPlaceholder,
+            blocks: [
+              ...blocksLibraryPlaceholder.blocks,
+              ...session.organizationManager.listBlocks(),
+            ],
+          }),
         },
       ],
     }),
@@ -168,6 +190,101 @@ export function registerResources(server: McpServer, session: CadSession): void 
           uri: uri.href,
           mimeType: "application/json",
           text: jsonResourceBody(materialsLibraryPlaceholder),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-linetypes-list",
+    "cad://linetypes/list",
+    {
+      title: "Linetypes",
+      description: "Built-in line type definitions (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(linetypesLibrary),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-text-styles",
+    "cad://styles/text",
+    {
+      title: "Text styles",
+      description: "Built-in text styles (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(textStylesLibrary),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-dimension-styles",
+    "cad://styles/dimension",
+    {
+      title: "Dimension styles",
+      description: "Built-in dimension styles (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(dimensionStylesLibrary),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-standards-iso",
+    "cad://standards/iso",
+    {
+      title: "ISO drafting guidance",
+      description: "Starter ISO drafting rules (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(isoStandardResource),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-standards-ansi",
+    "cad://standards/ansi",
+    {
+      title: "ANSI drafting guidance",
+      description: "Starter ANSI drafting rules (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(ansiStandardResource),
         },
       ],
     }),

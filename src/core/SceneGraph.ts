@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from "uuid";
 import type {
-  Entity2D,
+  Entity,
   EntityId,
   Layer,
-  NewEntity2D,
+  NewEntity,
   PolylineEntity,
   ProjectMetadata,
   SceneSnapshotV1,
@@ -13,8 +13,8 @@ export type { ProjectMetadata };
 
 const DEFAULT_LAYER = "0";
 
-function cloneEntity(entity: Entity2D): Entity2D {
-  return JSON.parse(JSON.stringify(entity)) as Entity2D;
+function cloneEntity(entity: Entity): Entity {
+  return JSON.parse(JSON.stringify(entity)) as Entity;
 }
 
 function cloneLayer(layer: Layer): Layer {
@@ -22,7 +22,7 @@ function cloneLayer(layer: Layer): Layer {
 }
 
 export class SceneGraph {
-  private readonly entities = new Map<EntityId, Entity2D>();
+  private readonly entities = new Map<EntityId, Entity>();
   private readonly layers = new Map<string, Layer>();
   private projectName = "Untitled";
   private updatedAt = new Date();
@@ -120,6 +120,7 @@ export class SceneGraph {
     if (!layer) {
       throw new Error(`Unknown layer "${name}"`);
     }
+    this.assertLayerUnlocked(name);
     for (const entity of this.entities.values()) {
       if (entity.layer === name) {
         entity.layer = DEFAULT_LAYER;
@@ -140,6 +141,7 @@ export class SceneGraph {
     if (!layer) {
       throw new Error(`Unknown layer "${oldName}"`);
     }
+    this.assertLayerUnlocked(oldName);
     if (this.layers.has(newName)) {
       throw new Error(`Layer "${newName}" already exists`);
     }
@@ -188,7 +190,7 @@ export class SceneGraph {
     return Array.from(this.layers.values());
   }
 
-  addEntity(input: NewEntity2D): EntityId {
+  addEntity(input: NewEntity): EntityId {
     const layerName = this.resolveLayerName(input.layer);
     if (layerName !== undefined) {
       this.assertLayerUnlocked(layerName);
@@ -197,7 +199,7 @@ export class SceneGraph {
     if (this.entities.has(id)) {
       throw new Error(`Entity "${id}" already exists`);
     }
-    const entity = { ...input, id } as Entity2D;
+    const entity = { ...input, id } as Entity;
     this.entities.set(id, cloneEntity(entity));
     this.touch();
     return id;
@@ -311,16 +313,51 @@ export class SceneGraph {
       layer,
       properties: opts?.properties,
     };
-    return this.addEntity(poly as NewEntity2D);
+    return this.addEntity(poly as NewEntity);
   }
 
-  listEntities(): readonly Entity2D[] {
+  listEntities(): readonly Entity[] {
     return Array.from(this.entities.values()).map(cloneEntity);
   }
 
-  getEntity(id: EntityId): Entity2D | undefined {
+  getEntity(id: EntityId): Entity | undefined {
     const e = this.entities.get(id);
     return e === undefined ? undefined : cloneEntity(e);
+  }
+
+  replaceEntity(entity: Entity): void {
+    const existing = this.entities.get(entity.id);
+    if (!existing) {
+      throw new Error(`Entity "${entity.id}" not found`);
+    }
+    if (existing.layer !== undefined) {
+      this.assertLayerUnlocked(existing.layer);
+    }
+    const layerName = entity.layer ?? DEFAULT_LAYER;
+    this.resolveLayerName(layerName);
+    this.assertLayerUnlocked(layerName);
+    this.entities.set(entity.id, cloneEntity({ ...entity, layer: layerName }));
+    this.touch();
+  }
+
+  replaceEntities(entities: readonly Entity[]): void {
+    for (const entity of entities) {
+      const existing = this.entities.get(entity.id);
+      if (!existing) {
+        throw new Error(`Entity "${entity.id}" not found`);
+      }
+      if (existing.layer !== undefined) {
+        this.assertLayerUnlocked(existing.layer);
+      }
+      const layerName = entity.layer ?? DEFAULT_LAYER;
+      this.resolveLayerName(layerName);
+      this.assertLayerUnlocked(layerName);
+    }
+    for (const entity of entities) {
+      const layerName = entity.layer ?? DEFAULT_LAYER;
+      this.entities.set(entity.id, cloneEntity({ ...entity, layer: layerName }));
+    }
+    this.touch();
   }
 
   deleteEntity(id: EntityId): boolean {

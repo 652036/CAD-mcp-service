@@ -90,6 +90,12 @@ export function computeBBox(entities: readonly Entity2D[]): BBox | null {
           }
         }
         break;
+      case "ellipse":
+        if (c.length >= 5) {
+          add(c[0] - c[2], c[1] - c[3]);
+          add(c[0] + c[2], c[1] + c[3]);
+        }
+        break;
       case "rectangle":
         if (c.length >= 4) {
           const x = c[0];
@@ -102,7 +108,21 @@ export function computeBBox(entities: readonly Entity2D[]): BBox | null {
         break;
       case "polygon":
       case "polyline":
+      case "spline":
+      case "leader":
+      case "multileader":
         addCoordsPairs(c);
+        break;
+      case "text":
+      case "mtext":
+      case "symbol":
+      case "dimension":
+      case "table":
+      case "viewport":
+        if (c.length >= 2) {
+          add(c[0], c[1]);
+          add(c[0] + 10, c[1] + 5);
+        }
         break;
       default:
         break;
@@ -208,6 +228,13 @@ export function entitiesToSvg(entities: readonly Entity2D[]): string {
         );
         break;
       }
+      case "ellipse":
+        if (c.length >= 5) {
+          parts.push(
+            `<ellipse cx="${c[0]}" cy="${yFlip(c[1])}" rx="${c[2]}" ry="${c[3]}" fill="none" stroke="#222" stroke-width="0.25" transform="rotate(${(-c[4] * 180) / Math.PI} ${c[0]} ${yFlip(c[1])})"/>`,
+          );
+        }
+        break;
       case "polygon": {
         const pts = coordsToPointString(c, yFlip);
         if (c.length < 2) {
@@ -241,6 +268,33 @@ export function entitiesToSvg(entities: readonly Entity2D[]): string {
         }
         break;
       }
+      case "spline":
+      case "leader":
+      case "multileader": {
+        const pts = coordsToPointString(c, yFlip);
+        if (c.length >= 2) {
+          parts.push(
+            `<polyline points="${escapeAttr(pts)}" fill="none" stroke="#222" stroke-width="0.25"/>`,
+          );
+        }
+        break;
+      }
+      case "text":
+      case "mtext":
+      case "symbol":
+      case "dimension":
+      case "table":
+      case "viewport":
+        if (c.length >= 2) {
+          const label =
+            typeof e.properties?.subtype === "string"
+              ? e.properties.subtype
+              : e.type;
+          parts.push(
+            `<text x="${c[0]}" y="${yFlip(c[1])}" font-size="4" fill="#444">${escapeAttr(String(label))}</text>`,
+          );
+        }
+        break;
       default:
         break;
     }

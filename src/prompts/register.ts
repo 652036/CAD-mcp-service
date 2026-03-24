@@ -138,4 +138,154 @@ export function registerPrompts(server: McpServer): void {
       ],
     }),
   );
+
+  server.registerPrompt(
+    "create_assembly",
+    {
+      title: "Create an assembly plan",
+      description:
+        "Plan component structure, mates, and assembly order from a parts list or current scene.",
+      argsSchema: {
+        parts_list: z
+          .string()
+          .optional()
+          .describe("Known parts, quantities, or purchased components."),
+        target_behavior: z
+          .string()
+          .optional()
+          .describe("How the assembly should move or behave."),
+      },
+    },
+    async ({ parts_list, target_behavior }) => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "You are planning a CAD assembly using cad-mcp-server.",
+              "",
+              parts_list
+                ? `Known parts list:\n${parts_list}`
+                : "Infer a practical part breakdown and state assumptions clearly.",
+              "",
+              target_behavior
+                ? `Required behavior or motion:\n${target_behavior}`
+                : "Describe fixed, moving, and flexible subassemblies if relevant.",
+              "",
+              "Output: (1) assembly tree, (2) reference datums/origins, (3) suggested mate strategy, (4) likely interference risks, (5) next MCP actions or resources to inspect.",
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "optimize_design",
+    {
+      title: "Optimize the current design",
+      description:
+        "Review the model for weight, manufacturability, maintainability, and simplification opportunities.",
+      argsSchema: {
+        objective: z
+          .string()
+          .optional()
+          .describe("Primary goal such as lower mass, lower cost, or higher stiffness."),
+      },
+    },
+    async ({ objective }) => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "You are analyzing the active CAD design connected to cad-mcp-server.",
+              "",
+              objective
+                ? `Primary optimization objective: ${objective}.`
+                : "Balance performance, manufacturability, and modeling simplicity.",
+              "",
+              "Use current entities, layers, and drawing context where helpful.",
+              "Deliver: bottlenecks, specific geometry changes, tradeoffs, and a short prioritized action list.",
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "check_manufacturability",
+    {
+      title: "Check manufacturability",
+      description:
+        "Review the design for process-specific manufacturing risks and documentation gaps.",
+      argsSchema: {
+        process: z
+          .string()
+          .optional()
+          .describe("Manufacturing process such as CNC, sheet metal, casting, or FDM."),
+        material: z
+          .string()
+          .optional()
+          .describe("Target material or material family."),
+      },
+    },
+    async ({ process, material }) => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "You are performing a manufacturability review for a CAD model in cad-mcp-server.",
+              "",
+              process
+                ? `Target process: ${process}.`
+                : "Select the most likely manufacturing process and explain why.",
+              material ? `Material: ${material}.` : "Infer a reasonable candidate material if not provided.",
+              "",
+              "Output: process risks, geometry changes to reduce risk, tolerance/documentation concerns, and what the drafter should add before release.",
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "create_parametric",
+    {
+      title: "Convert a design to parametric form",
+      description:
+        "Identify driving dimensions and propose a reusable parameter scheme for the current design.",
+      argsSchema: {
+        product_family: z
+          .string()
+          .optional()
+          .describe("Variant family or SKU range this parameterization should support."),
+      },
+    },
+    async ({ product_family }) => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "You are converting the active design in cad-mcp-server into a more parametric workflow.",
+              "",
+              product_family
+                ? `Target product family: ${product_family}.`
+                : "Assume the design should support multiple size variants.",
+              "",
+              "Deliver: core parameters, dependencies between them, naming conventions, safe limits, and a migration plan from static geometry to parametric geometry.",
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
 }

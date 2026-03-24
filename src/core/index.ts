@@ -1,3 +1,10 @@
 export * from "./types.js";
 export { SceneGraph, type ProjectMetadata } from "./SceneGraph.js";
 export { HistoryManager } from "./HistoryManager.js";
+export { GeometryEngine } from "./GeometryEngine.js";
+export { ParametricEngine } from "./ParametricEngine.js";
+export { ConstraintSolver } from "./ConstraintSolver.js";
+export { Renderer } from "./Renderer.js";
+export { OrganizationManager } from "./OrganizationManager.js";
+export { AssemblyManager } from "./AssemblyManager.js";
+export { DrawingManager } from "./DrawingManager.js";

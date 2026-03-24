@@ -36,6 +36,24 @@ export function registerProjectFileTools(
   );
 
   server.registerTool(
+    "get_project_info",
+    {
+      description: "Return current project metadata and scene counts.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return mcpJson({
+          success: true,
+          data: session.sceneGraph.getProjectMetadata(),
+        });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
     "save_project",
     {
       description:
@@ -44,7 +62,7 @@ export function registerProjectFileTools(
     },
     async (args) => {
       try {
-        const snapshot = session.sceneGraph.exportSnapshot();
+        const snapshot = session.exportSnapshot();
         const file = parseProjectFileJson(serializeProjectFile(snapshot));
         await writeProjectFile(args.path, file);
         return mcpJson({ success: true });
@@ -59,6 +77,24 @@ export function registerProjectFileTools(
     {
       description:
         "Load a project JSON file from disk and replace the current scene (undo/redo cleared).",
+      inputSchema: { path: z.string() },
+    },
+    async (args) => {
+      try {
+        const file = await readProjectFile(args.path);
+        session.loadSnapshot(file.snapshot);
+        return mcpJson({ success: true });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "open_project",
+    {
+      description:
+        "Alias for load_project: load a project JSON file from disk and replace the current scene.",
       inputSchema: { path: z.string() },
     },
     async (args) => {

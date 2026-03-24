@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cad-mcp-server": {
+      "command": "node",
+      "args": [
+        "C:/Users/Administrator/Desktop/cad mcp/CAD-mcp-service/dist/index.js"
+      ],
+      "cwd": "C:/Users/Administrator/Desktop/cad mcp/CAD-mcp-service"
+    }
+  }
+}

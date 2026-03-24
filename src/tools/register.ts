@@ -1,14 +1,28 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { SceneGraph } from "../core/SceneGraph.js";
-import type { Entity2D, EntityType } from "../core/types.js";
+import type { Entity, Entity2D, EntityType } from "../core/types.js";
 import { importDxfToSceneData } from "../parsers/dxfImport.js";
 import { exportDxfFromEntities } from "../parsers/DxfParser.js";
 import type { CadSession } from "../session/index.js";
-import { entitiesToSvg } from "./preview/svgPreview.js";
 import { normalizeLengthUnit, toMillimetres } from "./units.js";
 import { mcpJson } from "./mcpJson.js";
+import { LAYER_TOOL_NAMES, registerLayerTools } from "./layerTools.js";
+import { MODIFY_2D_TOOL_NAMES, registerModify2dTools } from "./modify2dTools.js";
 import { registerProjectFileTools } from "./projectFileTools.js";
+import { QUERY_TOOL_NAMES, registerQueryTools } from "./queryTools.js";
+import { is2dEntity } from "../utils/entityKinds.js";
+import { GEOMETRY_3D_TOOL_NAMES, registerGeometry3dTools } from "./geometry3dTools.js";
+import { BOOLEAN_TOOL_NAMES, registerBooleanTools } from "./booleanTools.js";
+import { CONSTRAINT_TOOL_NAMES, registerConstraintTools } from "./constraintTools.js";
+import { ORGANIZATION_TOOL_NAMES, registerOrganizationTools } from "./organizationTools.js";
+import { ASSEMBLY_TOOL_NAMES, registerAssemblyTools } from "./assemblyTools.js";
+import { ANALYSIS_TOOL_NAMES, registerAnalysisTools } from "./analysisTools.js";
+import { ANNOTATION_TOOL_NAMES, registerAnnotationTools } from "./annotationTools.js";
+import { DRAWING_TOOL_NAMES, registerDrawingTools } from "./drawingTools.js";
+import { IO_TOOL_NAMES, registerIoTools } from "./ioTools.js";
+import { ADVANCED_2D_TOOL_NAMES, registerAdvanced2dTools } from "./advanced2dTools.js";
+import { TOPOLOGY_TOOL_NAMES, registerTopologyTools } from "./topologyTools.js";
 
 const DEFAULT_LAYER = "0";
 
@@ -43,6 +57,7 @@ type EntityListFilter = {
   kind?: EntityType | EntityType[];
   layer?: string;
   ids?: string[];
+  color?: string;
 };
 
 function parseEntityFilter(raw: unknown): EntityListFilter | undefined {
@@ -68,6 +83,9 @@ function parseEntityFilter(raw: unknown): EntityListFilter | undefined {
   if (Array.isArray(o.ids)) {
     filter.ids = o.ids.filter((x): x is string => typeof x === "string");
   }
+  if (typeof o.color === "string") {
+    filter.color = o.color;
+  }
   return filter;
 }
 
@@ -91,7 +109,21 @@ function filterEntities(
   if (filter.layer !== undefined && filter.layer !== "") {
     out = out.filter((e) => e.layer === filter.layer);
   }
+  if (filter.color !== undefined && filter.color !== "") {
+    out = out.filter((e) => e.properties?.color === filter.color);
+  }
   return out;
+}
+
+function filterVisibleEntities(
+  sceneGraph: SceneGraph,
+  list: readonly Entity[],
+): Entity[] {
+  const layers = sceneGraph.getLayers();
+  return list.filter((entity) => {
+    const layerName = entity.layer ?? DEFAULT_LAYER;
+    return layers.get(layerName)?.visible !== false;
+  });
 }
 
 function toolError(err: unknown): ReturnType<typeof mcpJson> {
@@ -123,8 +155,24 @@ export const REGISTERED_TOOL_NAMES = [
   "undo",
   "redo",
   "new_project",
+  "get_project_info",
   "save_project",
   "load_project",
+  "open_project",
+  ...LAYER_TOOL_NAMES,
+  ...QUERY_TOOL_NAMES,
+  ...MODIFY_2D_TOOL_NAMES,
+  ...GEOMETRY_3D_TOOL_NAMES,
+  ...BOOLEAN_TOOL_NAMES,
+  ...CONSTRAINT_TOOL_NAMES,
+  ...ORGANIZATION_TOOL_NAMES,
+  ...ASSEMBLY_TOOL_NAMES,
+  ...ANALYSIS_TOOL_NAMES,
+  ...ANNOTATION_TOOL_NAMES,
+  ...DRAWING_TOOL_NAMES,
+  ...IO_TOOL_NAMES,
+  ...ADVANCED_2D_TOOL_NAMES,
+  ...TOPOLOGY_TOOL_NAMES,
 ] as const;
 
 export function registerTools(server: McpServer, session: CadSession): void {
@@ -428,7 +476,12 @@ export function registerTools(server: McpServer, session: CadSession): void {
     async (args) => {
       try {
         const filter = parseEntityFilter(args.filter);
-        const list = filterEntities(sceneGraph.listEntities(), filter);
+        const list = filterEntities(
+          filterVisibleEntities(sceneGraph, sceneGraph.listEntities()).filter(
+            is2dEntity,
+          ),
+          filter,
+        );
         return mcpJson({
           success: true,
           data: { entities: list, count: list.length },
@@ -504,12 +557,12 @@ export function registerTools(server: McpServer, session: CadSession): void {
       },
     },
     async (args) => {
-      let list = [...sceneGraph.listEntities()];
+      let list = filterVisibleEntities(sceneGraph, sceneGraph.listEntities());
       if (args.entity_ids?.length) {
         const set = new Set(args.entity_ids);
         list = list.filter((e) => set.has(e.id));
       }
-      const svg = entitiesToSvg(list);
+      const svg = session.renderer.renderSvg(list);
       return mcpJson({
         success: true,
         data: { svg, entity_count: list.length },
@@ -581,7 +634,7 @@ export function registerTools(server: McpServer, session: CadSession): void {
       },
     },
     async (args) => {
-      let list = [...sceneGraph.listEntities()];
+      let list = [...sceneGraph.listEntities()].filter(is2dEntity);
       if (args.entity_ids?.length) {
         const set = new Set(args.entity_ids);
         list = list.filter((e) => set.has(e.id));
@@ -698,5 +751,19 @@ export function registerTools(server: McpServer, session: CadSession): void {
     },
   );
 
+  registerLayerTools(server, session);
+  registerQueryTools(server, session);
+  registerModify2dTools(server, session);
+  registerGeometry3dTools(server, session);
+  registerBooleanTools(server, session);
+  registerConstraintTools(server, session);
+  registerOrganizationTools(server, session);
+  registerAssemblyTools(server, session);
+  registerAnalysisTools(server, session);
+  registerAnnotationTools(server, session);
+  registerDrawingTools(server, session);
+  registerIoTools(server, session);
+  registerAdvanced2dTools(server, session);
+  registerTopologyTools(server, session);
   registerProjectFileTools(server, session);
 }
