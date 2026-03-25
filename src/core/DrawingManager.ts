@@ -32,6 +32,8 @@ export class DrawingManager {
       template,
       views: [],
       annotations: [],
+      layoutOptions: {},
+      exportOptions: {},
     };
     this.drawings.set(drawing.id, drawing);
     return clone(drawing);
@@ -76,6 +78,45 @@ export class DrawingManager {
       throw new Error(`Drawing not found: ${drawingId}`);
     }
     drawing.sheetSize = sheetSize;
+    return clone(drawing);
+  }
+
+  setTemplate(drawingId: string, template: string): DrawingRecord {
+    const drawing = this.drawings.get(drawingId);
+    if (!drawing) {
+      throw new Error(`Drawing not found: ${drawingId}`);
+    }
+    drawing.template = template;
+    return clone(drawing);
+  }
+
+  setLayoutOptions(
+    drawingId: string,
+    patch: Record<string, unknown>,
+  ): DrawingRecord {
+    const drawing = this.drawings.get(drawingId);
+    if (!drawing) {
+      throw new Error(`Drawing not found: ${drawingId}`);
+    }
+    drawing.layoutOptions = {
+      ...(drawing.layoutOptions ?? {}),
+      ...clone(patch),
+    };
+    return clone(drawing);
+  }
+
+  setExportOptions(
+    drawingId: string,
+    patch: Record<string, unknown>,
+  ): DrawingRecord {
+    const drawing = this.drawings.get(drawingId);
+    if (!drawing) {
+      throw new Error(`Drawing not found: ${drawingId}`);
+    }
+    drawing.exportOptions = {
+      ...(drawing.exportOptions ?? {}),
+      ...clone(patch),
+    };
     return clone(drawing);
   }
 

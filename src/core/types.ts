@@ -7,6 +7,33 @@ export interface Layer {
   locked: boolean;
 }
 
+export interface ProjectCrs {
+  code?: string;
+  name?: string;
+  wkt?: string;
+  units?: string;
+}
+
+export interface ProjectOrigin {
+  x: number;
+  y: number;
+  z?: number;
+}
+
+export interface ProjectExtent {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export interface GeoReferenceMetadata {
+  crs?: ProjectCrs;
+  origin?: ProjectOrigin;
+  extent?: ProjectExtent;
+  drawingScale?: number;
+}
+
 export type EntityType =
   | "point"
   | "line"
@@ -286,6 +313,8 @@ export interface DrawingRecord {
   sheetSize?: string;
   views: DrawingViewRecord[];
   annotations: string[];
+  layoutOptions?: Record<string, unknown>;
+  exportOptions?: Record<string, unknown>;
 }
 
 export interface ParametricState {
@@ -306,7 +335,7 @@ export interface DrawingState {
   drawings: DrawingRecord[];
 }
 
-export interface ProjectMetadata {
+export interface ProjectMetadata extends GeoReferenceMetadata {
   name: string;
   units: "mm";
   entityCount: number;
@@ -314,7 +343,7 @@ export interface ProjectMetadata {
   updatedAt: string;
 }
 
-export interface SceneSnapshotV1 {
+export interface SceneSnapshotV1 extends GeoReferenceMetadata {
   version: 1;
   projectName: string;
   updatedAt: string;

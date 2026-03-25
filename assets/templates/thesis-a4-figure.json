@@ -1,0 +1,14 @@
+{
+  "name": "Thesis A4 Figure",
+  "paperSize": "A4",
+  "orientation": "portrait",
+  "margin": 12,
+  "titleBlock": {
+    "position": [12, 10],
+    "fields": ["title", "author", "date", "figureNo"]
+  },
+  "legend": {
+    "position": [120, 12],
+    "width": 55
+  }
+}

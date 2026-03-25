@@ -48,36 +48,52 @@ export class GeometryEngine {
     }
     const bboxA = this.measureBoundingBox(entityA);
     const bboxB = this.measureBoundingBox(entityB);
-    const minX =
-      operation === "intersect"
-        ? Math.max(bboxA.min[0], bboxB.min[0])
-        : Math.min(bboxA.min[0], bboxB.min[0]);
-    const minY =
-      operation === "intersect"
-        ? Math.max(bboxA.min[1], bboxB.min[1])
-        : Math.min(bboxA.min[1], bboxB.min[1]);
-    const minZ =
-      operation === "intersect"
-        ? Math.max(bboxA.min[2], bboxB.min[2])
-        : Math.min(bboxA.min[2], bboxB.min[2]);
-    const maxX =
-      operation === "intersect"
-        ? Math.min(bboxA.max[0], bboxB.max[0])
-        : Math.max(bboxA.max[0], bboxB.max[0]);
-    const maxY =
-      operation === "intersect"
-        ? Math.min(bboxA.max[1], bboxB.max[1])
-        : Math.max(bboxA.max[1], bboxB.max[1]);
-    const maxZ =
-      operation === "intersect"
-        ? Math.min(bboxA.max[2], bboxB.max[2])
-        : Math.max(bboxA.max[2], bboxB.max[2]);
-    if (maxX <= minX || maxY <= minY || maxZ <= minZ) {
+    const result =
+      operation === "union"
+        ? {
+            min: [
+              Math.min(bboxA.min[0], bboxB.min[0]),
+              Math.min(bboxA.min[1], bboxB.min[1]),
+              Math.min(bboxA.min[2], bboxB.min[2]),
+            ] as [number, number, number],
+            max: [
+              Math.max(bboxA.max[0], bboxB.max[0]),
+              Math.max(bboxA.max[1], bboxB.max[1]),
+              Math.max(bboxA.max[2], bboxB.max[2]),
+            ] as [number, number, number],
+          }
+        : operation === "intersect"
+          ? {
+              min: [
+                Math.max(bboxA.min[0], bboxB.min[0]),
+                Math.max(bboxA.min[1], bboxB.min[1]),
+                Math.max(bboxA.min[2], bboxB.min[2]),
+              ] as [number, number, number],
+              max: [
+                Math.min(bboxA.max[0], bboxB.max[0]),
+                Math.min(bboxA.max[1], bboxB.max[1]),
+                Math.min(bboxA.max[2], bboxB.max[2]),
+              ] as [number, number, number],
+            }
+          : this.approximateSubtractBoundingBox(bboxA, bboxB);
+
+    if (
+      result.max[0] <= result.min[0] ||
+      result.max[1] <= result.min[1] ||
+      result.max[2] <= result.min[2]
+    ) {
       throw new Error("Boolean operation result is empty");
     }
     return this.createSolid({
       type: "boolean_result",
-      coords: [minX, minY, minZ, maxX - minX, maxY - minY, maxZ - minZ],
+      coords: [
+        result.min[0],
+        result.min[1],
+        result.min[2],
+        result.max[0] - result.min[0],
+        result.max[1] - result.min[1],
+        result.max[2] - result.min[2],
+      ],
       layer: entityA.layer,
       properties: {
         operation,
@@ -85,6 +101,72 @@ export class GeometryEngine {
         id: randomUUID(),
       },
     });
+  }
+
+  private approximateSubtractBoundingBox(
+    left: { min: [number, number, number]; max: [number, number, number] },
+    right: { min: [number, number, number]; max: [number, number, number] },
+  ): { min: [number, number, number]; max: [number, number, number] } {
+    const overlapMin: [number, number, number] = [
+      Math.max(left.min[0], right.min[0]),
+      Math.max(left.min[1], right.min[1]),
+      Math.max(left.min[2], right.min[2]),
+    ];
+    const overlapMax: [number, number, number] = [
+      Math.min(left.max[0], right.max[0]),
+      Math.min(left.max[1], right.max[1]),
+      Math.min(left.max[2], right.max[2]),
+    ];
+
+    if (
+      overlapMax[0] <= overlapMin[0] ||
+      overlapMax[1] <= overlapMin[1] ||
+      overlapMax[2] <= overlapMin[2]
+    ) {
+      return { min: [...left.min], max: [...left.max] };
+    }
+
+    const next = {
+      min: [...left.min] as [number, number, number],
+      max: [...left.max] as [number, number, number],
+    };
+
+    const axisCandidates = [0, 1, 2]
+      .map((index) => ({
+        index,
+        overlap: overlapMax[index] - overlapMin[index],
+        span: left.max[index] - left.min[index],
+      }))
+      .filter((item) => item.overlap < item.span);
+
+    if (axisCandidates.length === 0) {
+      return {
+        min: [...left.min],
+        max: [...left.min],
+      };
+    }
+
+    const axis = axisCandidates
+      .sort((a, b) => b.overlap / b.span - a.overlap / a.span)[0].index;
+
+    const touchesMin = overlapMin[axis] <= left.min[axis];
+    const touchesMax = overlapMax[axis] >= left.max[axis];
+
+    if (touchesMin && !touchesMax) {
+      next.min[axis] = overlapMax[axis];
+    } else if (touchesMax && !touchesMin) {
+      next.max[axis] = overlapMin[axis];
+    } else {
+      const keepLower = overlapMin[axis] - left.min[axis];
+      const keepUpper = left.max[axis] - overlapMax[axis];
+      if (keepLower >= keepUpper) {
+        next.max[axis] = overlapMin[axis];
+      } else {
+        next.min[axis] = overlapMax[axis];
+      }
+    }
+
+    return next;
   }
 
   measureBoundingBox(entity: Entity3D | Entity): {

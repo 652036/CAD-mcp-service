@@ -24,6 +24,14 @@ import { IO_TOOL_NAMES, registerIoTools } from "./ioTools.js";
 import { ADVANCED_2D_TOOL_NAMES, registerAdvanced2dTools } from "./advanced2dTools.js";
 import { TOPOLOGY_TOOL_NAMES, registerTopologyTools } from "./topologyTools.js";
 import { AUTOCAD_TOOL_NAMES, registerAutoCadTools } from "./autocadTools.js";
+import { GIS_TOOL_NAMES, registerGisTools } from "./gisTools.js";
+import { GIS_IO_TOOL_NAMES, registerGisIoTools } from "./gisIoTools.js";
+import { FIELD_SURVEY_TOOL_NAMES, registerFieldSurveyTools } from "./fieldSurveyTools.js";
+import { MAP_DRAWING_TOOL_NAMES, registerMapDrawingTools } from "./mapDrawingTools.js";
+import {
+  TERRAIN_ANALYSIS_TOOL_NAMES,
+  registerTerrainAnalysisTools,
+} from "./terrainAnalysisTools.js";
 
 const DEFAULT_LAYER = "0";
 
@@ -175,6 +183,11 @@ export const REGISTERED_TOOL_NAMES = [
   ...ADVANCED_2D_TOOL_NAMES,
   ...TOPOLOGY_TOOL_NAMES,
   ...AUTOCAD_TOOL_NAMES,
+  ...GIS_TOOL_NAMES,
+  ...GIS_IO_TOOL_NAMES,
+  ...FIELD_SURVEY_TOOL_NAMES,
+  ...MAP_DRAWING_TOOL_NAMES,
+  ...TERRAIN_ANALYSIS_TOOL_NAMES,
 ] as const;
 
 export function registerTools(server: McpServer, session: CadSession): void {
@@ -764,7 +777,12 @@ export function registerTools(server: McpServer, session: CadSession): void {
   registerAnalysisTools(server, session);
   registerAnnotationTools(server, session);
   registerDrawingTools(server, session);
+  registerMapDrawingTools(server, session);
   registerIoTools(server, session);
+  registerGisIoTools(server, session);
+  registerGisTools(server, session);
+  registerFieldSurveyTools(server, session);
+  registerTerrainAnalysisTools(server, session);
   registerAdvanced2dTools(server, session);
   registerTopologyTools(server, session);
   registerProjectFileTools(server, session);

@@ -2,10 +2,14 @@ import { v4 as uuidv4 } from "uuid";
 import type {
   Entity,
   EntityId,
+  GeoReferenceMetadata,
   Layer,
   NewEntity,
   PolylineEntity,
   ProjectMetadata,
+  ProjectCrs,
+  ProjectExtent,
+  ProjectOrigin,
   SceneSnapshotV1,
 } from "./types.js";
 
@@ -26,6 +30,10 @@ export class SceneGraph {
   private readonly layers = new Map<string, Layer>();
   private projectName = "Untitled";
   private updatedAt = new Date();
+  private projectCrs: ProjectCrs | undefined;
+  private projectOrigin: ProjectOrigin | undefined;
+  private projectExtent: ProjectExtent | undefined;
+  private drawingScale: number | undefined;
 
   constructor() {
     this.ensureDefaultLayer();
@@ -36,11 +44,48 @@ export class SceneGraph {
     this.touch();
   }
 
+  setGeoReference(meta: GeoReferenceMetadata): void {
+    this.projectCrs = meta.crs ? JSON.parse(JSON.stringify(meta.crs)) as ProjectCrs : undefined;
+    this.projectOrigin = meta.origin
+      ? JSON.parse(JSON.stringify(meta.origin)) as ProjectOrigin
+      : undefined;
+    this.projectExtent = meta.extent
+      ? JSON.parse(JSON.stringify(meta.extent)) as ProjectExtent
+      : undefined;
+    this.drawingScale = meta.drawingScale;
+    this.touch();
+  }
+
+  getGeoReference(): GeoReferenceMetadata {
+    return {
+      crs: this.projectCrs
+        ? JSON.parse(JSON.stringify(this.projectCrs)) as ProjectCrs
+        : undefined,
+      origin: this.projectOrigin
+        ? JSON.parse(JSON.stringify(this.projectOrigin)) as ProjectOrigin
+        : undefined,
+      extent: this.projectExtent
+        ? JSON.parse(JSON.stringify(this.projectExtent)) as ProjectExtent
+        : undefined,
+      drawingScale: this.drawingScale,
+    };
+  }
+
   exportSnapshot(): SceneSnapshotV1 {
     return {
       version: 1,
       projectName: this.projectName,
       updatedAt: this.updatedAt.toISOString(),
+      crs: this.projectCrs
+        ? JSON.parse(JSON.stringify(this.projectCrs)) as ProjectCrs
+        : undefined,
+      origin: this.projectOrigin
+        ? JSON.parse(JSON.stringify(this.projectOrigin)) as ProjectOrigin
+        : undefined,
+      extent: this.projectExtent
+        ? JSON.parse(JSON.stringify(this.projectExtent)) as ProjectExtent
+        : undefined,
+      drawingScale: this.drawingScale,
       layers: Array.from(this.layers.values()).map(cloneLayer),
       entities: Array.from(this.entities.values()).map(cloneEntity),
     };
@@ -56,6 +101,16 @@ export class SceneGraph {
     this.layers.clear();
     this.projectName = snapshot.projectName;
     this.updatedAt = new Date(snapshot.updatedAt);
+    this.projectCrs = snapshot.crs
+      ? JSON.parse(JSON.stringify(snapshot.crs)) as ProjectCrs
+      : undefined;
+    this.projectOrigin = snapshot.origin
+      ? JSON.parse(JSON.stringify(snapshot.origin)) as ProjectOrigin
+      : undefined;
+    this.projectExtent = snapshot.extent
+      ? JSON.parse(JSON.stringify(snapshot.extent)) as ProjectExtent
+      : undefined;
+    this.drawingScale = snapshot.drawingScale;
     for (const layer of snapshot.layers) {
       this.layers.set(layer.name, cloneLayer(layer));
     }
@@ -411,6 +466,16 @@ export class SceneGraph {
       entityCount: this.entities.size,
       layerCount: this.layers.size,
       updatedAt: this.updatedAt.toISOString(),
+      crs: this.projectCrs
+        ? JSON.parse(JSON.stringify(this.projectCrs)) as ProjectCrs
+        : undefined,
+      origin: this.projectOrigin
+        ? JSON.parse(JSON.stringify(this.projectOrigin)) as ProjectOrigin
+        : undefined,
+      extent: this.projectExtent
+        ? JSON.parse(JSON.stringify(this.projectExtent)) as ProjectExtent
+        : undefined,
+      drawingScale: this.drawingScale,
     };
   }
 }

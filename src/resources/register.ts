@@ -9,6 +9,7 @@ import {
   materialsLibraryPlaceholder,
   textStylesLibrary,
 } from "./libraries.js";
+import { listDrawingTemplates, readDrawingTemplate } from "./templates.js";
 import { SERVER_VERSION } from "../version.js";
 
 function jsonResourceBody(data: unknown): string {
@@ -25,6 +26,65 @@ function visibleEntities(session: CadSession) {
 
 export function registerResources(server: McpServer, session: CadSession): void {
   const sceneGraph = session.sceneGraph;
+  server.registerResource(
+    "cad-templates-list",
+    "cad://templates/list",
+    {
+      title: "Drawing templates",
+      description: "Available drawing/map template files (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody({
+            templates: await listDrawingTemplates(),
+          }),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-templates-thesis-a3-map",
+    "cad://templates/thesis-a3-map",
+    {
+      title: "Thesis A3 map template",
+      description: "A3 thesis map layout template (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(await readDrawingTemplate("thesis-a3-map.json")),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-templates-thesis-a4-figure",
+    "cad://templates/thesis-a4-figure",
+    {
+      title: "Thesis A4 figure template",
+      description: "A4 thesis figure layout template (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(await readDrawingTemplate("thesis-a4-figure.json")),
+        },
+      ],
+    }),
+  );
+
   server.registerResource(
     "cad-project-current",
     "cad://project/current",
@@ -52,6 +112,46 @@ export function registerResources(server: McpServer, session: CadSession): void 
   );
 
   server.registerResource(
+    "cad-project-georef",
+    "cad://project/georef",
+    {
+      title: "Project georeference",
+      description: "CRS, origin, extent, and drawing scale metadata (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(sceneGraph.getGeoReference()),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-project-extent",
+    "cad://project/extent",
+    {
+      title: "Project extent",
+      description: "Active project extent for mapping and layout workflows (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody({
+            extent: sceneGraph.getGeoReference().extent,
+          }),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
     "cad-entities-list",
     "cad://entities/list",
     {
@@ -65,6 +165,52 @@ export function registerResources(server: McpServer, session: CadSession): void 
           uri: uri.href,
           mimeType: "application/json",
           text: jsonResourceBody(visibleEntities(session)),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-domain-sampling-points",
+    "cad://domain/sampling_points",
+    {
+      title: "Sampling points",
+      description: "Sampling point entities and attributes in the current scene (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(
+            visibleEntities(session).filter(
+              (entity) => entity.properties?.kind === "sampling_point",
+            ),
+          ),
+        },
+      ],
+    }),
+  );
+
+  server.registerResource(
+    "cad-domain-profile-lines",
+    "cad://domain/profile_lines",
+    {
+      title: "Profile lines",
+      description: "Profile line entities used for section and transect work (JSON)",
+      mimeType: "application/json",
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: jsonResourceBody(
+            visibleEntities(session).filter(
+              (entity) => entity.properties?.kind === "profile_line",
+            ),
+          ),
         },
       ],
     }),

@@ -42,6 +42,32 @@ const layerSchema = z
   })
   .strict();
 
+const crsSchema = z
+  .object({
+    code: z.string().optional(),
+    name: z.string().optional(),
+    wkt: z.string().optional(),
+    units: z.string().optional(),
+  })
+  .strict();
+
+const originSchema = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+    z: z.number().optional(),
+  })
+  .strict();
+
+const extentSchema = z
+  .object({
+    minX: z.number(),
+    minY: z.number(),
+    maxX: z.number(),
+    maxY: z.number(),
+  })
+  .strict();
+
 const entitySchema = z
   .object({
     id: z.string(),
@@ -57,6 +83,10 @@ export const sceneSnapshotV1Schema = z.object({
   version: z.literal(1),
   projectName: z.string(),
   updatedAt: z.string(),
+  crs: crsSchema.optional(),
+  origin: originSchema.optional(),
+  extent: extentSchema.optional(),
+  drawingScale: z.number().positive().optional(),
   layers: z.array(layerSchema),
   entities: z.array(entitySchema),
 });
@@ -158,6 +188,8 @@ const drawingStateSchema = z.object({
       name: z.string(),
       template: z.string().optional(),
       sheetSize: z.string().optional(),
+      layoutOptions: z.record(z.string(), z.unknown()).optional(),
+      exportOptions: z.record(z.string(), z.unknown()).optional(),
       views: z.array(
         z.object({
           id: z.string(),

@@ -4,6 +4,8 @@ import type { Entity, Entity3D } from "../core/types.js";
 import type { CadSession } from "../session/index.js";
 import { is3dEntity } from "../utils/entityKinds.js";
 import { getBoundingBox3D, getCentroid, getSurfaceArea, getVolume } from "../utils/solidMetrics.js";
+import { listAssemblyCollisions, measureBoundingBoxDistance, resolveAnalysisTarget } from "../utils/assemblyAnalysis.js";
+import { buildMaterialPropertiesPatch, cubicMillimetresToCubicMetres, resolveMaterialDensityKgM3 } from "../utils/materials.js";
 import { computeBBox } from "./preview/svgPreview.js";
 import { getCurveLengthValue } from "./queryTools.js";
 import { mcpJson } from "./mcpJson.js";
@@ -41,6 +43,33 @@ function planarArea(entity: Entity): number {
   }
   const bbox = computeBBox([entity as never]);
   return bbox ? Math.abs((bbox.maxX - bbox.minX) * (bbox.maxY - bbox.minY)) : 0;
+}
+
+export function getMassPropertiesData(entity: Entity3D): {
+  mass: number;
+  volume: number;
+  volume_m3: number;
+  densityKgM3: number;
+  centroid: [number, number, number];
+  inertia: {
+    centroidal: true;
+    value: number;
+  };
+} {
+  const volume = getVolume(entity);
+  const volumeM3 = cubicMillimetresToCubicMetres(volume);
+  const density = resolveMaterialDensityKgM3(entity);
+  return {
+    mass: volumeM3 * density,
+    volume,
+    volume_m3: volumeM3,
+    densityKgM3: density,
+    centroid: getCentroid(entity),
+    inertia: {
+      centroidal: true,
+      value: (volumeM3 * density) / 12,
+    },
+  };
 }
 
 export const ANALYSIS_TOOL_NAMES = [
@@ -238,37 +267,17 @@ export function registerAnalysisTools(
   server.registerTool(
     "check_interference",
     {
-      description: "Check component interference using component reference bbox overlap.",
+      description:
+        "Check component interference using transformed component bounding boxes.",
       inputSchema: { assembly_id: z.string().min(1), tolerance: z.number().optional() },
     },
     async (args) => {
       try {
-        const assembly = session.assemblyManager.getAssembly(args.assembly_id);
-        if (!assembly) {
-          return mcpJson({ success: false, error: `Assembly not found: ${args.assembly_id}` });
-        }
-        const collisions: Array<{ a: string; b: string }> = [];
-        for (let i = 0; i < assembly.components.length; i++) {
-          for (let j = i + 1; j < assembly.components.length; j++) {
-            const a = session.sceneGraph.getEntity(assembly.components[i].ref);
-            const b = session.sceneGraph.getEntity(assembly.components[j].ref);
-            if (!a || !b) {
-              continue;
-            }
-            const ab = getBoundingBox3D(a);
-            const bb = getBoundingBox3D(b);
-            const overlap =
-              ab.min[0] <= bb.max[0] &&
-              ab.max[0] >= bb.min[0] &&
-              ab.min[1] <= bb.max[1] &&
-              ab.max[1] >= bb.min[1] &&
-              ab.min[2] <= bb.max[2] &&
-              ab.max[2] >= bb.min[2];
-            if (overlap) {
-              collisions.push({ a: assembly.components[i].id, b: assembly.components[j].id });
-            }
-          }
-        }
+        const collisions = listAssemblyCollisions(
+          session,
+          args.assembly_id,
+          args.tolerance ?? 0,
+        );
         return mcpJson({ success: true, data: { collisions, count: collisions.length } });
       } catch (err) {
         return toolError(err);
@@ -279,22 +288,43 @@ export function registerAnalysisTools(
   server.registerTool(
     "check_clearance",
     {
-      description: "Check if minimum distance meets a clearance threshold.",
+      description:
+        "Check if minimum distance meets a clearance threshold. Accepts entity ids or assembly component ids; use assembly_id to scope component lookup.",
       inputSchema: {
         component_a: z.string().min(1),
         component_b: z.string().min(1),
+        assembly_id: z.string().min(1).optional(),
         min_clearance: z.number().nonnegative(),
       },
     },
     async (args) => {
       try {
-        const a = getBoundingBox3D(getEntity(session, args.component_a));
-        const b = getBoundingBox3D(getEntity(session, args.component_b));
-        const dx = Math.max(0, a.min[0] - b.max[0], b.min[0] - a.max[0]);
-        const dy = Math.max(0, a.min[1] - b.max[1], b.min[1] - a.max[1]);
-        const dz = Math.max(0, a.min[2] - b.max[2], b.min[2] - a.max[2]);
-        const clearance = Math.hypot(dx, dy, dz);
-        return mcpJson({ success: true, data: { clearance, ok: clearance >= args.min_clearance } });
+        const left = resolveAnalysisTarget(
+          session,
+          args.component_a,
+          args.assembly_id,
+        );
+        const right = resolveAnalysisTarget(
+          session,
+          args.component_b,
+          args.assembly_id,
+        );
+        if (!left) {
+          return mcpJson({ success: false, error: `Component or entity not found: ${args.component_a}` });
+        }
+        if (!right) {
+          return mcpJson({ success: false, error: `Component or entity not found: ${args.component_b}` });
+        }
+        const clearance = measureBoundingBoxDistance(left.bbox, right.bbox);
+        return mcpJson({
+          success: true,
+          data: {
+            clearance,
+            ok: clearance >= args.min_clearance,
+            source_a: left.type,
+            source_b: right.type,
+          },
+        });
       } catch (err) {
         return toolError(err);
       }
@@ -312,7 +342,10 @@ export function registerAnalysisTools(
         const entity = getEntity(session, args.solid_id);
         session.sceneGraph.replaceEntity({
           ...entity,
-          properties: { ...(entity.properties ?? {}), material: args.material_name },
+          properties: {
+            ...(entity.properties ?? {}),
+            ...buildMaterialPropertiesPatch(args.material_name),
+          },
         });
         return mcpJson({ success: true, entity_ids: [args.solid_id] });
       } catch (err) {
@@ -333,20 +366,9 @@ export function registerAnalysisTools(
         if (!is3dEntity(entity)) {
           return mcpJson({ success: false, error: "get_mass_properties requires a 3D solid" });
         }
-        const volume = getVolume(entity);
-        const density = Number(entity.properties?.densityKgM3 ?? 1);
-        const centroid = getCentroid(entity);
         return mcpJson({
           success: true,
-          data: {
-            mass: volume * density,
-            volume,
-            centroid,
-            inertia: {
-              centroidal: true,
-              value: (volume * density) / 12,
-            },
-          },
+          data: getMassPropertiesData(entity),
         });
       } catch (err) {
         return toolError(err);
