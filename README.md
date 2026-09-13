@@ -1,5 +1,10 @@
 # CAD MCP Server / CAD MCP 服务
 
+**文档 / Documentation:** [简体中文](README.zh-CN.md) | [English](README.en.md)
+
+中文和英文独立文档包含安装配置、AutoCAD 接管、使用示例、测试及故障排查。
+The standalone guides cover setup, AutoCAD attachment, examples, testing, and troubleshooting.
+
 TypeScript-based CAD server for the Model Context Protocol (MCP).  
 基于 TypeScript 的 Model Context Protocol (MCP) CAD 服务。
 
