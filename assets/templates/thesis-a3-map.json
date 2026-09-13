@@ -1,0 +1,26 @@
+{
+  "name": "Thesis A3 Map",
+  "paperSize": "A3",
+  "orientation": "landscape",
+  "margin": 18,
+  "titleBlock": {
+    "position": [16, 10],
+    "fields": ["title", "author", "advisor", "date", "figureNo", "crs", "scale"]
+  },
+  "legend": {
+    "position": [340, 18],
+    "width": 60
+  },
+  "northArrow": {
+    "position": [378, 220],
+    "size": 12
+  },
+  "scaleBar": {
+    "position": [250, 18],
+    "segmentLength": 20,
+    "segments": 5
+  },
+  "coordinateGrid": {
+    "enabled": true
+  }
+}

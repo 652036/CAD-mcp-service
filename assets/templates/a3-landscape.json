@@ -1,0 +1,9 @@
+{
+  "name": "A3 Landscape",
+  "paperSize": "A3",
+  "orientation": "landscape",
+  "titleBlock": {
+    "position": [20, 10],
+    "fields": ["title", "drawnBy", "checkedBy", "revision", "date"]
+  }
+}

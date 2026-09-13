@@ -1,0 +1,36 @@
+{
+  "name": "cad-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP CAD server (MVP scaffold)",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "keywords": [
+    "mcp",
+    "cad"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "dxf-parser": "^1.1.2",
+    "geotiff": "^3.0.5",
+    "opencascade.js": "^1.1.1",
+    "proj4": "^2.20.8",
+    "shapefile": "^0.6.6",
+    "sharp": "^0.34.5",
+    "shp-write": "^0.3.2",
+    "uuid": "^11.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "@types/proj4": "^2.5.6",
+    "tsx": "^4.19.3",
+    "typescript": "^5.5.4"
+  }
+}

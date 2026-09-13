@@ -1,0 +1,11 @@
+interface:
+  display_name: "CAD MCP"
+  short_description: "Operate the CAD MCP server safely"
+  default_prompt: "Use $cad-mcp to draft, inspect, preview, or export CAD and lightweight GIS drawings."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "cad-mcp-server"
+      description: "Repository CAD MCP stdio server for CAD drafting, file exchange, previews, lightweight GIS, and AutoCAD bridge tools"
+      transport: "stdio"
