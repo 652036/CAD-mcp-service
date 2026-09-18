@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Entity, Entity3D, NewEntity3D } from "./types.js";
 import { SceneGraph } from "./SceneGraph.js";
 import { is3dEntity } from "../utils/entityKinds.js";
+import { subtractBoundingBox } from "../utils/subtractBoundingBox.js";
 import { OpenCascadeAdapter, type OpenCascadeStatus } from "./OpenCascadeAdapter.js";
 
 function clone<T>(value: T): T {
@@ -75,7 +76,7 @@ export class GeometryEngine {
                 Math.min(bboxA.max[2], bboxB.max[2]),
               ] as [number, number, number],
             }
-          : this.approximateSubtractBoundingBox(bboxA, bboxB);
+          : subtractBoundingBox(bboxA, bboxB);
 
     if (
       result.max[0] <= result.min[0] ||
@@ -101,72 +102,6 @@ export class GeometryEngine {
         id: randomUUID(),
       },
     });
-  }
-
-  private approximateSubtractBoundingBox(
-    left: { min: [number, number, number]; max: [number, number, number] },
-    right: { min: [number, number, number]; max: [number, number, number] },
-  ): { min: [number, number, number]; max: [number, number, number] } {
-    const overlapMin: [number, number, number] = [
-      Math.max(left.min[0], right.min[0]),
-      Math.max(left.min[1], right.min[1]),
-      Math.max(left.min[2], right.min[2]),
-    ];
-    const overlapMax: [number, number, number] = [
-      Math.min(left.max[0], right.max[0]),
-      Math.min(left.max[1], right.max[1]),
-      Math.min(left.max[2], right.max[2]),
-    ];
-
-    if (
-      overlapMax[0] <= overlapMin[0] ||
-      overlapMax[1] <= overlapMin[1] ||
-      overlapMax[2] <= overlapMin[2]
-    ) {
-      return { min: [...left.min], max: [...left.max] };
-    }
-
-    const next = {
-      min: [...left.min] as [number, number, number],
-      max: [...left.max] as [number, number, number],
-    };
-
-    const axisCandidates = [0, 1, 2]
-      .map((index) => ({
-        index,
-        overlap: overlapMax[index] - overlapMin[index],
-        span: left.max[index] - left.min[index],
-      }))
-      .filter((item) => item.overlap < item.span);
-
-    if (axisCandidates.length === 0) {
-      return {
-        min: [...left.min],
-        max: [...left.min],
-      };
-    }
-
-    const axis = axisCandidates
-      .sort((a, b) => b.overlap / b.span - a.overlap / a.span)[0].index;
-
-    const touchesMin = overlapMin[axis] <= left.min[axis];
-    const touchesMax = overlapMax[axis] >= left.max[axis];
-
-    if (touchesMin && !touchesMax) {
-      next.min[axis] = overlapMax[axis];
-    } else if (touchesMax && !touchesMin) {
-      next.max[axis] = overlapMin[axis];
-    } else {
-      const keepLower = overlapMin[axis] - left.min[axis];
-      const keepUpper = left.max[axis] - overlapMax[axis];
-      if (keepLower >= keepUpper) {
-        next.max[axis] = overlapMin[axis];
-      } else {
-        next.min[axis] = overlapMax[axis];
-      }
-    }
-
-    return next;
   }
 
   measureBoundingBox(entity: Entity3D | Entity): {
